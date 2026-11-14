@@ -97,7 +97,7 @@ export default function App() {
         <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled"
           refreshControl={(v.name === 'edt' || v.name === 'notes') ? <RefreshControl refreshing={pulling} colors={[C.pri]} tintColor={C.pri}
             onRefresh={async () => { if (!pull.fn) return; setPulling(true); try { await pull.fn(); } finally { setPulling(false); } }} /> : undefined}>
-          {screen}
+          <Guard key={v.name + (v.id || '') + (v.tool || '')} C={C} onHome={() => setView({ name: 'home' })}>{screen}</Guard>
         </ScrollView>
         {isTop && (
           <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: C.line, backgroundColor: C.card, paddingTop: 6, paddingBottom: Platform.OS === 'android' ? 24 : 28 }}>
@@ -146,4 +146,25 @@ function Busy({ title, sub, C }) {
       <Text style={{ color: C.muted, marginTop: 14, textAlign: 'center' }}>{sub || "L'IA lit tes cours… Ça peut prendre 1 à 2 minutes. Garde l'appli ouverte."} {s} s</Text>
     </View>
   );
+}
+
+// Filet de sécurité : si un écran plante, on affiche l'erreur au lieu d'un écran blanc
+class Guard extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    const { C, onHome } = this.props;
+    if (!this.state.err) return this.props.children;
+    return (
+      <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 20, marginTop: 10 }}>
+        <Text style={{ fontSize: 40 }}>🐛</Text>
+        <Text style={{ color: C.ink, fontSize: 20, fontWeight: '900', marginTop: 6 }}>Oups, cet écran a planté</Text>
+        <Text style={{ color: C.muted, marginTop: 8 }}>Fais une capture et envoie-la à Claude pour qu'il corrige :</Text>
+        <Text style={{ color: C.bad, marginTop: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 }}>{String(this.state.err && (this.state.err.stack || this.state.err.message || this.state.err)).slice(0, 600)}</Text>
+        <Pressable onPress={onHome} style={{ backgroundColor: C.pri, borderRadius: 14, padding: 13, alignItems: 'center', marginTop: 16 }}>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>Retour à l'accueil</Text>
+        </Pressable>
+      </View>
+    );
+  }
 }

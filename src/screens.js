@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err } from './ui';
-import { today, addDays, diffDays, fmtDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore } from './logic';
+import { today, addDays, diffDays, fmtDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
 import { gemini, DEFAULT_MODEL } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
 import { Item, skipItem, TCours, TFiches, TPractice, TOrdre, TExos, TRedac, TBilan } from './tabs';
@@ -220,6 +220,22 @@ export function Chapter({ id, tab, setTab }) {
       Alert.alert('✨ Ajouté', `${n} nouvelles questions.`);
     } catch (e) { Alert.alert('Oups', e.message); }
   };
+  const vary = async () => {
+    if (!S.settings.apiKey) return Alert.alert('Clé manquante', "Ajoute ta clé Gemini dans ⚙️ Réglages.");
+    const qIdx = p.qcm.map((_, i) => i), fIdx = p.vf.map((_, i) => i);
+    if (!qIdx.length && !fIdx.length) return Alert.alert('Rien à varier', "Ce chapitre n'a pas encore de questions.");
+    try {
+      let n = 0;
+      await runAI('Nouvelles formulations', async () => {
+        for (let k = 0; k < Math.max(qIdx.length, fIdx.length); k += 20) {
+          const r = await gemini({ apiKey: S.settings.apiKey, model: S.settings.model, prompt: promptVariants(ch, qIdx.slice(k, k + 20), fIdx.slice(k, k + 20)) });
+          n += applyVariants(ch, r);
+        }
+      }, "L'IA reformule tes questions et équilibre les réponses…");
+      commit();
+      Alert.alert('🔀 C\'est fait', `${n} questions ont maintenant plusieurs formulations, et les choix des QCM ont la même longueur.`);
+    } catch (e) { Alert.alert('Oups', e.message); }
+  };
   const Tab = { cours: TCours, fiches: TFiches, quiz: TPractice, vf: TPractice, ordre: TOrdre, exos: TExos, redac: TRedac, bilan: TBilan }[cur];
   const size = items(ch, true).length + p.exercices.length;
   return (
@@ -239,6 +255,7 @@ export function Chapter({ id, tab, setTab }) {
       <Row style={{ marginBottom: 12 }}>
         <Btn small kind="sec" label="📷 Notes" onPress={() => setModal(<AddNotesForm id={id} />)} />
         <Btn small kind="sec" label="✨ + Questions" onPress={() => more('q')} />
+        <Btn small kind="sec" label="🔀 Varier" onPress={vary} />
         <Btn small kind="sec" label="📤 Partager" onPress={() => setModal(<ShareChoice ch={ch} />)} />
         <Btn small kind="ghost" label="⚙️" onPress={() => setModal(<ChSettings id={id} />)} />
       </Row>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Opt, Fb, Progress, Input, Rich, Note } from './ui';
-import { shuffle, items, grade, randomItems, errorItems, buildCloze, norm, stripTags, num, today } from './logic';
+import { shuffle, items, grade, randomItems, errorItems, buildCloze, norm, stripTags, num, today, pickPhrase } from './logic';
 import { S, commit, matOf, activeChs } from './store';
 import { scheduleTimer, cancelTimer } from './notifs';
 
@@ -109,7 +109,7 @@ function Eclair({ mats }) {
       <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}><Text style={{ fontSize: 28, fontWeight: '800', color: left <= 10 ? C.bad : C.ink }}>⏱️ {left}</Text><Text style={{ fontSize: 22, fontWeight: '800', color: C.ok }}>✓ {sc}</Text></Row>
       <Progress value={(left / 60) * 100} color={left <= 10 ? C.bad : C.pri} />
       <Card style={{ borderColor: flash === 'ok' ? C.ok : flash === 'bad' ? C.bad : C.line, borderWidth: flash ? 3 : 1 }}>
-        <Rich style={{ fontWeight: '700', marginBottom: 8 }}>{it.t === 'q' ? x.q : x.a}</Rich>
+        <Rich style={{ fontWeight: '700', marginBottom: 8 }}>{pickPhrase(it.t === 'q' ? x.q : x.a, x.variantes)}</Rich>
         {it.t === 'q'
           ? x.choix.map((c, k) => <Opt key={k} label={c} onPress={() => answer(k === x.bonne)} />)
           : <Row style={{ flexWrap: 'nowrap' }}><Opt center label="Vrai" onPress={() => answer(x.vrai)} /><Opt center label="Faux" onPress={() => answer(!x.vrai)} /></Row>}
@@ -204,7 +204,7 @@ function Exam({ mats }) {
     const e = shuffle(c.pack.exercices.filter((x) => x.numerique)).slice(0, 4).map((x) => ({ t: 'e', x }));
     let l = [...q.slice(0, 8), ...f.slice(0, 6), ...e];
     l = [...l, ...q.slice(8), ...f.slice(6)].slice(0, 20);
-    setCh(c); setQs(shuffle(l)); setI(0); setRes([]); setVal('');
+    setCh(c); setQs(shuffle(l).map((o) => ({ ...o, phrase: o.t === 'e' ? o.x.enonce : pickPhrase(o.t === 'q' ? o.x.q : o.x.a, o.x.variantes) }))); setI(0); setRes([]); setVal('');
   };
   if (!ch) return (
     <Card>
@@ -239,7 +239,7 @@ function Exam({ mats }) {
     <Card>
       <Progress value={(i / qs.length) * 100} />
       <Txt muted>Question {i + 1} / {qs.length}</Txt>
-      <Rich style={{ fontWeight: '700', marginVertical: 10 }}>{q.t === 'q' ? q.x.q : q.t === 'f' ? q.x.a : q.x.enonce}</Rich>
+      <Rich style={{ fontWeight: '700', marginVertical: 10 }}>{q.phrase}</Rich>
       {q.t === 'q' && order.map((k) => <Opt key={k} label={q.x.choix[k]} onPress={() => answer(k === q.x.bonne)} />)}
       {q.t === 'f' && <Row style={{ flexWrap: 'nowrap' }}><Opt center label="Vrai" onPress={() => answer(q.x.vrai)} /><Opt center label="Faux" onPress={() => answer(!q.x.vrai)} /></Row>}
       {q.t === 'e' && <View>

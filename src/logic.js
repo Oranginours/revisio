@@ -34,8 +34,8 @@ export const SCHEMA = `{
  "resume": [{"titre":"partie du cours","texte":"résumé clair, phrases courtes, retours à la ligne avec \\n"}],
  "formules": [{"nom":"...","formule":"...","note":"unités, conditions"}],
  "vocab": [{"terme":"...","def":"définition"}],
- "qcm": [{"q":"question","choix":["...","...","...","..."],"bonne":0,"expl":"explication courte"}],
- "vf": [{"a":"affirmation","vrai":true,"expl":"explication courte"}],
+ "qcm": [{"q":"question","variantes":["la même question posée autrement","..."],"choix":["...","...","...","..."],"bonne":0,"expl":"explication courte"}],
+ "vf": [{"a":"affirmation","variantes":["la même affirmation dite autrement (même valeur vrai/faux)","..."],"vrai":true,"expl":"explication courte"}],
  "ordres": [{"titre":"Remets dans l'ordre : ...","etapes":[{"t":"étape ou événement SANS sa date","d":"date ou précision montrée après correction (peut être vide)"}]}],
  "exercices": [{"enonce":"...","reponse":"20","unite":"g/L","numerique":true,"correction":"correction détaillée"}],
  "ouvertes": [{"q":"question de rédaction type contrôle","attendus":"éléments attendus dans une bonne réponse"}],
@@ -49,6 +49,8 @@ export const RULES = `Règles :
 - Si une info des notes te semble fausse, garde la version des notes dans les questions et signale-la dans "alertes".
 - Seules balises permises dans les textes : <sub>, <sup>, <b>.
 - "bonne" est l'index (à partir de 0) de la bonne réponse dans "choix". Varie sa position.
+- QCM : les 4 choix doivent avoir à peu près la MÊME LONGUEUR et le même style. La bonne réponse ne doit PAS être la plus longue, la plus précise ou la plus nuancée : un élève ne doit pas pouvoir la deviner à sa forme. Les mauvaises réponses sont plausibles (vraies notions du chapitre, mais pas la bonne ici).
+- "variantes" : pour chaque QCM et chaque vrai/faux, donne 2 ou 3 autres façons de poser la même question (autres mots, autre angle, question inversée…), qui ont exactement la même bonne réponse.
 - Dans "ordres", donne les étapes dans le BON ordre (l'appli les mélange). Utilise "ordres" pour les frises chronologiques et les protocoles ; [] s'il n'y en a pas.
 - "exercices" : seulement si la matière comporte des calculs ou des exercices à réponse précise ; sinon []. "reponse" est une chaîne ; "numerique" vaut true si la réponse est un nombre (mets le nombre seul dans "reponse").`;
 
@@ -64,9 +66,9 @@ export function normPack(p) {
     vocab: A('vocab').filter((x) => x && x.terme && x.def).map((x) => ({ terme: s(x.terme), def: s(x.def) })),
     qcm: A('qcm').filter((x) => x && x.q && Array.isArray(x.choix) && x.choix.length >= 2).map((x) => {
       const b = Number.isInteger(+x.bonne) && +x.bonne >= 0 && +x.bonne < x.choix.length ? +x.bonne : 0;
-      return { q: s(x.q), choix: x.choix.map(s), bonne: b, expl: s(x.expl) };
+      return { q: s(x.q), variantes: (Array.isArray(x.variantes) ? x.variantes : []).map(s).filter(Boolean).slice(0, 4), choix: x.choix.map(s), bonne: b, expl: s(x.expl) };
     }),
-    vf: A('vf').filter((x) => x && x.a).map((x) => ({ a: s(x.a), vrai: x.vrai === true || x.vrai === 'true', expl: s(x.expl) })),
+    vf: A('vf').filter((x) => x && x.a).map((x) => ({ a: s(x.a), variantes: (Array.isArray(x.variantes) ? x.variantes : []).map(s).filter(Boolean).slice(0, 4), vrai: x.vrai === true || x.vrai === 'true', expl: s(x.expl) })),
     ordres: A('ordres').filter((x) => x && Array.isArray(x.etapes) && x.etapes.length >= 3).map((x) => ({
       titre: s(x.titre),
       etapes: x.etapes.map((e) => (typeof e === 'string' ? { t: e, d: '' } : { t: s(e.t), d: s(e.d) })),
@@ -252,4 +254,37 @@ export function isArchived(ch) {
   if (ch.archived === true) return true;
   if (ch.archived === false) return false;
   return dsPassed(ch);
+}
+
+/* ---------- variantes des questions ---------- */
+// Choisit au hasard une des formulations d'une question
+export const pickPhrase = (main, variantes) => { const all = [main, ...(variantes || [])].filter(Boolean); return all[Math.floor(Math.random() * all.length)] || main; };
+
+// Demande à l'IA des formulations différentes + des choix de même longueur, pour un lot de questions
+export function promptVariants(ch, qIdx, fIdx) {
+  const p = ch.pack;
+  const qcm = qIdx.map((i) => ({ i, q: stripTags(p.qcm[i].q), choix: p.qcm[i].choix.map(stripTags), bonne: p.qcm[i].bonne }));
+  const vf = fIdx.map((i) => ({ i, a: stripTags(p.vf[i].a), vrai: p.vf[i].vrai }));
+  return `Tu aides un élève français à réviser le chapitre « ${ch.titre} ». Voici ses questions :
+QCM : ${JSON.stringify(qcm)}
+Vrai/faux : ${JSON.stringify(vf)}
+Pour chaque QCM :
+- "variantes" : 3 autres façons de poser la même question (autres mots, autre angle, question inversée…), qui ont EXACTEMENT la même bonne réponse.
+- "choix" : réécris les 4 choix pour qu'ils aient à peu près la MÊME LONGUEUR et le même style. La bonne réponse (même sens qu'avant) ne doit PAS être la plus longue ni la plus précise. Mélange l'ordre, et donne "bonne", l'index (à partir de 0) de la bonne réponse dans tes nouveaux choix.
+Pour chaque vrai/faux : "variantes" : 3 autres formulations de l'affirmation, avec la MÊME valeur vrai/faux.
+Tout en français, au niveau de l'élève. Seules balises permises : <sub>, <sup>.
+Réponds UNIQUEMENT en JSON : {"qcm":[{"i":0,"variantes":["..."],"choix":["...","...","...","..."],"bonne":2}],"vf":[{"i":0,"variantes":["..."]}]}`;
+}
+export function applyVariants(ch, r) {
+  const p = ch.pack; let n = 0;
+  const str = (a) => (Array.isArray(a) ? a.map((v) => String(v || '')).filter(Boolean).slice(0, 4) : []);
+  ((r && r.qcm) || []).forEach((o) => {
+    const q = p.qcm[o && o.i]; if (!q) return;
+    const v = str(o.variantes); if (v.length) { q.variantes = v; n++; }
+    if (Array.isArray(o.choix) && o.choix.length === q.choix.length && Number.isInteger(+o.bonne) && +o.bonne >= 0 && +o.bonne < o.choix.length) {
+      q.choix = o.choix.map(String); q.bonne = +o.bonne;
+    }
+  });
+  ((r && r.vf) || []).forEach((o) => { const f = p.vf[o && o.i]; if (!f) return; const v = str(o.variantes); if (v.length) { f.variantes = v; n++; } });
+  return n;
 }

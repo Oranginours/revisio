@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err } from './ui';
-import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain } from './logic';
+import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase } from './logic';
 import { S, commit, matOf } from './store';
 import { gemini } from './ai';
 import { ChapterGrades } from './school';
@@ -16,6 +16,8 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   const [expl, setExpl] = useState(null);
   const order = useMemo(() => (it.t === 'q' ? shuffle(it.x.choix.map((_, i) => i)) : []), [it]);
   const x = it.x;
+  // une formulation différente à chaque fois, pour la même réponse
+  const phrase = useMemo(() => (it.t === 'q' ? pickPhrase(x.q, x.variantes) : it.t === 'f' ? pickPhrase(x.a, x.variantes) : ''), [it]);
   const explain = async () => {
     const ch = it.ch;
     setExpl({ loading: true });
@@ -54,7 +56,7 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   return (
     <View>
       {it.t === 'f' && <Txt muted>Vrai ou faux ?</Txt>}
-      <Rich style={{ fontWeight: '700', marginVertical: 8 }}>{it.t === 'q' ? x.q : x.a}</Rich>
+      <Rich style={{ fontWeight: '700', marginVertical: 8 }}>{phrase}</Rich>
       {it.t === 'q'
         ? order.map((i) => <Opt key={i} label={x.choix[i]} onPress={() => pick(i)} state={!answered ? null : i === x.bonne ? 'good' : i === ans ? 'wrong' : null} />)
         : <Row style={{ flexWrap: 'nowrap' }}>{[true, false].map((v) => <Opt key={String(v)} center label={v ? 'Vrai' : 'Faux'} onPress={() => pick(v)} state={!answered ? null : v === x.vrai ? 'good' : v === ans ? 'wrong' : null} />)}</Row>}

@@ -266,15 +266,17 @@ export function Edt() {
       {week && !lessons.length ? <Card><Txt muted>Pas de cours ce jour-là 🎉</Txt></Card> : null}
       {lessons.map((l) => {
         const mid = matiereFor(l.subject); const m = S.profil.matieres.find((x) => x.id === mid);
+        const nowIso = new Date().toISOString(); const live = l.start <= nowIso && nowIso < l.end; const past = l.end <= nowIso;
         return (
           <Pressable key={l.id + l.start} onPress={() => openSubject(l.subject, ctx)}
-            style={{ flexDirection: 'row', gap: 10, backgroundColor: C.card, borderWidth: 1, borderColor: l.test ? C.bad : C.line, borderRadius: 12, padding: 12, marginBottom: 8, opacity: l.canceled ? 0.5 : 1 }}>
+            style={({ pressed }) => ({ flexDirection: 'row', gap: 10, backgroundColor: live ? C.priSoft : C.card, borderWidth: live || l.test ? 2 : 1, borderColor: live ? C.pri : l.test ? C.bad : C.line, borderRadius: 18, padding: 14, marginBottom: 8, opacity: l.canceled ? 0.5 : past ? 0.6 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
             <View style={{ width: 4, borderRadius: 2, backgroundColor: l.color || (m && m.couleur) || C.pri }} />
             <View style={{ width: 52 }}><Txt bold>{hhmm(l.start)}</Txt><Txt muted>{hhmm(l.end)}</Txt></View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: C.ink, fontWeight: '700', fontSize: 15, textDecorationLine: l.canceled ? 'line-through' : 'none' }}>{l.subject}</Text>
               <Txt muted>{[l.room, l.teacher].filter(Boolean).join(' · ')}</Txt>
               <Row style={{ marginTop: 4 }}>
+                {live && <Chip>⏺ En cours</Chip>}
                 {l.test && <Chip>📝 DS / contrôle</Chip>}
                 {l.status ? <Chip>{l.status}</Chip> : null}
                 {m ? <Txt muted>→ {m.nom} ›</Txt> : <Txt muted>Toucher pour relier à une matière ›</Txt>}
@@ -328,6 +330,7 @@ export function Notes() {
                     <View style={{ flex: 1 }}><Txt bold>{s.name}</Txt>{s.cls !== null && <Txt muted>Classe : {fmtN(s.cls)}</Txt>}</View>
                     <Text style={{ fontSize: 18, fontWeight: '800', color: color(s.avg, s.outOf) }}>{fmtN(s.avg)}</Text>
                   </Pressable>
+                  {open === s.name && <Btn small kind="sec" label="🧮 Simuler une note" style={{ alignSelf: 'flex-start', marginLeft: 20, marginBottom: 6 }} onPress={() => openSim(s.name, gs, setModal)} />}
                   {open === s.name && gs.map((g) => { const lc = chapterOfGrade(g.id); return (
                     <Pressable key={g.id} onPress={() => pickChapterForGrade(g, setModal)} style={{ flexDirection: 'row', gap: 10, paddingVertical: 6, paddingLeft: 20 }}>
                       <View style={{ flex: 1 }}><Txt>{g.comment || 'Évaluation'}</Txt><Txt muted>{fmtDate(g.date.slice(0, 10))} · coef {g.coef}{g.avg !== null ? ' · classe ' + fmtN(g.avg) : ''}</Txt><Txt muted>{lc ? '🔗 ' + lc.titre : '＋ Associer à un chapitre'}</Txt></View>
@@ -494,3 +497,88 @@ function pickChapterForGrade(g, setModal) {
     </View>
   );
 }
+
+/* ================= Prochain cours (accueil) ================= */
+function allLessons() { return Object.values(S.cache.edt || {}).flatMap((w) => w.lessons || []); }
+export function nextLesson() {
+  const now = new Date().toISOString();
+  const ls = allLessons().filter((l) => !l.canceled && l.end > now).sort((a, b) => (a.start < b.start ? -1 : 1));
+  return ls[0] || null;
+}
+const until = (iso) => {
+  const min = Math.round((new Date(iso) - Date.now()) / 60000);
+  if (min <= 0) return 'maintenant';
+  if (min < 60) return `dans ${min} min`;
+  if (min < 24 * 60 && new Date(iso).getDate() === new Date().getDate()) return `dans ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+  return fmtDate(dstr(new Date(iso))) + ' à ' + hhmm(iso);
+};
+export function NextLesson() {
+  const ctx = useApp(); const { C } = ctx;
+  if (!S.pronote) return null;
+  const l = nextLesson();
+  if (!l) return null;
+  const live = l.start <= new Date().toISOString();
+  const mid = matiereFor(l.subject); const m = S.profil.matieres.find((x) => x.id === mid);
+  const n = mid ? chaptersOf(mid).filter((c) => !isArchived(c)).length : 0;
+  return (
+    <Pressable onPress={() => openSubject(l.subject, ctx)} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ width: 6, alignSelf: 'stretch', borderRadius: 3, backgroundColor: l.color || (m && m.couleur) || C.pri }} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>{live ? '⏺ EN COURS' : '⏭ PROCHAIN COURS · ' + until(l.start).toUpperCase()}</Text>
+          <Text style={{ color: C.ink, fontWeight: '900', fontSize: 18, marginTop: 2 }} numberOfLines={1}>{l.subject}</Text>
+          <Text style={{ color: C.muted, fontSize: 13 }}>{hhmm(l.start)} – {hhmm(l.end)}{l.room ? ' · ' + l.room : ''}{l.test ? ' · 📝 DS' : ''}</Text>
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ fontSize: 22 }}>{n ? '📘' : '📷'}</Text>
+          <Text style={{ color: C.muted, fontSize: 10, fontWeight: '700' }}>{n ? 'Revoir' : 'Ajouter'}</Text>
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+/* ================= Simulateur de moyenne ================= */
+// Moyenne /20 pondérée par les coefficients (estimation : Pronote peut avoir d'autres règles)
+function simAvg(list) {
+  const ok = list.filter((g) => g.kind === 0 && g.value !== null && g.outOf);
+  const w = ok.reduce((a, g) => a + (g.coef || 1), 0);
+  return w ? ok.reduce((a, g) => a + (g.value / g.outOf) * 20 * (g.coef || 1), 0) / w : null;
+}
+function GradeSim({ subject, grades }) {
+  const { C, setModal } = useApp();
+  const [note, setNote] = useState('');
+  const [coef, setCoef] = useState('1');
+  const [target, setTarget] = useState('');
+  const cur = simAvg(grades);
+  const n = parseFloat(String(note).replace(',', '.')), c = parseFloat(String(coef).replace(',', '.')) || 1, t = parseFloat(String(target).replace(',', '.'));
+  const valid = grades.filter((g) => g.kind === 0 && g.value !== null && g.outOf);
+  const W = valid.reduce((a, g) => a + (g.coef || 1), 0), Sum = valid.reduce((a, g) => a + (g.value / g.outOf) * 20 * (g.coef || 1), 0);
+  const after = !isNaN(n) ? (Sum + n * c) / (W + c) : null;
+  const need = !isNaN(t) ? (t * (W + c) - Sum) / c : null;
+  const Big = ({ v, l, col }) => <View style={{ flex: 1, backgroundColor: C.bg, borderRadius: 16, padding: 12, alignItems: 'center' }}><Text style={{ fontSize: 24, fontWeight: '900', color: col || C.ink }}>{v}</Text><Text style={{ color: C.muted, fontSize: 12 }}>{l}</Text></View>;
+  return (
+    <View>
+      <H2>🧮 Simulateur · {subject}</H2>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Big v={fmtN(cur)} l="moyenne actuelle" />
+        <Big v={after === null ? '—' : fmtN(after)} l="avec la nouvelle note" col={after === null ? null : after >= (cur || 0) ? C.ok : C.bad} />
+      </View>
+      <Label>Si j'ai… (sur 20)</Label>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Input style={{ flex: 2 }} value={note} onChangeText={setNote} keyboardType="decimal-pad" placeholder="14" />
+        <Input style={{ flex: 1 }} value={coef} onChangeText={setCoef} keyboardType="decimal-pad" placeholder="coef" />
+      </View>
+      <Label>Pour avoir une moyenne de…</Label>
+      <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="12" />
+      {need !== null && (
+        <Fb ok={need <= 20}>
+          <Txt bold>{need <= 0 ? `C'est déjà gagné, même avec 0 🎉` : need > 20 ? `Il faudrait ${fmtN(need)}/20 : impossible avec une seule note (coef ${c}).` : `Il te faut au moins ${fmtN(Math.ceil(need * 4) / 4)}/20 (coef ${c}).`}</Txt>
+        </Fb>
+      )}
+      <Txt muted style={{ marginTop: 10, fontSize: 12 }}>Estimation à partir des notes visibles. Pronote peut calculer autrement (sous-moyennes, notes bonus…).</Txt>
+      <Btn kind="ghost" label="Fermer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={() => setModal(null)} />
+    </View>
+  );
+}
+export function openSim(subject, grades, setModal) { setModal(<GradeSim subject={subject} grades={grades} />); }

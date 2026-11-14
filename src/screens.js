@@ -10,7 +10,7 @@ import { Item, skipItem, TCours, TFiches, TPractice, TOrdre, TExos, TRedac, TBil
 import { S, commit, matOf, activeChs } from './store';
 import { MatiereForm, ChapitreForm, AddNotesForm, ChSettings, loadExamples } from './forms';
 import { ImportForm, ShareChoice, exportBackup, importBackup } from './share';
-import { DsDetected, QrLogin, logoutPronote, firstName } from './school';
+import { DsDetected, QrLogin, logoutPronote, firstName, NextLesson } from './school';
 import { tipOfDay } from './tools';
 import { levelInfo, levelTitle, sessionDone } from './progress';
 
@@ -88,21 +88,29 @@ export function Home() {
         </View>
       </FadeIn>
 
+      <NextLesson />
       <LevelRow />
 
       <DsDetected />
 
       {up.length > 0 && (
-        <Card>
-          <H2>📅 Prochains DS</H2>
-          {up.map((c) => { const m = matOf(c); return (
-            <Pressable key={c.id} onPress={() => go({ name: 'ch', id: c.id, tab: 'cours' })} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
-              <Dot color={m.couleur} />
-              <View style={{ flex: 1 }}><Txt bold>{c.titre}</Txt><Txt muted>{m.nom} · {fmtDate(c.ds)} · maîtrisé à {mastery(c)} %</Txt></View>
-              <DsBadge info={dsInfo(c.ds)} />
-            </Pressable>
-          ); })}
-        </Card>
+        <View style={{ marginBottom: 14 }}>
+          <Text style={{ color: C.ink, fontSize: 19, fontWeight: '900', marginBottom: 10, marginLeft: 2 }}>📅 Prochains DS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 6 }}>
+            {up.map((c) => { const m = matOf(c); const d = diffDays(t, c.ds); const mast = mastery(c); return (
+              <Pressable key={c.id} onPress={() => go({ name: 'ch', id: c.id, tab: 'cours' })} style={({ pressed }) => ({ width: 170, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+                <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 14, borderWidth: d <= 3 ? 2 : C.dark ? 1 : 0, borderColor: d <= 3 ? C.bad : C.line, minHeight: 150 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Dot color={m.couleur} /><Text style={{ color: C.muted, fontSize: 12, fontWeight: '700', flex: 1 }} numberOfLines={1}>{m.nom}</Text></View>
+                  <Text style={{ color: d <= 3 ? C.bad : C.ink, fontSize: 30, fontWeight: '900', marginTop: 6 }}>{d === 0 ? "Aujourd'hui" : d === 1 ? 'Demain' : 'J-' + d}</Text>
+                  <Text style={{ color: C.ink, fontWeight: '700', marginTop: 2 }} numberOfLines={2}>{c.titre}</Text>
+                  <View style={{ flex: 1 }} />
+                  <Progress value={mast} color={m.couleur} height={6} />
+                  <Text style={{ color: C.muted, fontSize: 11 }}>maîtrisé à {mast} %</Text>
+                </View>
+              </Pressable>
+            ); })}
+          </ScrollView>
+        </View>
       )}
 
       {P.matieres.map((m) => {

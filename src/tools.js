@@ -50,6 +50,7 @@ export function Train() {
         <T icon="🔁" title="Fiches inversées" sub="Définition → mot" onPress={() => go({ name: 'tool', tool: 'inverse', mats, back: 'train' })} />
         <T icon="📝" title="Examen blanc" sub="Note sur 20" onPress={() => go({ name: 'tool', tool: 'exam', mats, back: 'train' })} />
         <T icon="🍅" title="Pomodoro" sub="25 min de concentration" onPress={() => go({ name: 'tool', tool: 'pomodoro', back: 'train' })} />
+        <T icon="📈" title="Mes progrès" sub="Niveau, stats, badges" onPress={() => go({ name: 'progres', back: 'train' })} />
         <T icon="💡" title="Bien apprendre" sub="10 conseils qui marchent" onPress={() => go({ name: 'tool', tool: 'conseils', back: 'train' })} />
       </View>
     </View>

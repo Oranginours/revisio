@@ -12,6 +12,7 @@ import { MatiereForm, ChapitreForm, AddNotesForm, ChSettings, loadExamples } fro
 import { ImportForm, ShareChoice, exportBackup, importBackup } from './share';
 import { DsDetected, QrLogin, logoutPronote, firstName } from './school';
 import { tipOfDay } from './tools';
+import { levelInfo, levelTitle, sessionDone } from './progress';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -87,6 +88,8 @@ export function Home() {
         </View>
       </FadeIn>
 
+      <LevelRow />
+
       <DsDetected />
 
       {up.length > 0 && (
@@ -153,6 +156,28 @@ export function Home() {
   );
 }
 
+// Niveau et XP, touche pour voir « Mes progrès »
+function LevelRow() {
+  const { C, go } = useApp();
+  const L = levelInfo();
+  const got = Object.keys(S.profil.badges || {}).length;
+  return (
+    <Pressable onPress={() => go({ name: 'progres', back: 'home' })}>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
+        <View style={{ width: 46, height: 46, borderRadius: 16, backgroundColor: C.priSoft, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: C.priInk, fontWeight: '900', fontSize: 18 }}>{L.lvl}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: C.ink, fontWeight: '800' }}>Niveau {L.lvl} · {levelTitle(L.lvl)}</Text>
+          <Progress value={L.pct} height={8} />
+          <Text style={{ color: C.muted, fontSize: 12 }}>{L.need - L.into} XP avant le niveau {L.lvl + 1} · 🏅 {got} badge{got > 1 ? 's' : ''}</Text>
+        </View>
+        <Text style={{ color: C.muted, fontSize: 22 }}>›</Text>
+      </Card>
+    </Pressable>
+  );
+}
+
 /* ================= Choix avant la session ================= */
 function SessionSetup() {
   const { setModal, go } = useApp();
@@ -179,11 +204,11 @@ function SessionSetup() {
 /* ================= Session (du jour, rapide, erreurs) ================= */
 const MODE_TITLES = { jour: 'Session du jour', rapide: '⚡ Mode rapide', erreurs: '❌ Mes erreurs' };
 export const sessionTitle = (mode) => MODE_TITLES[mode] || 'Session';
-export function Session({ mode, mats }) {
+export function Session({ mode, mats, chId }) {
   const { go, C } = useApp();
   const [st, setSt] = useState(() => {
-    const chs = activeChs().filter((c) => !mats || !mats.length || mats.includes(c.matiereId));
-    const list = mode === 'rapide' ? randomItems(chs, 20) : mode === 'erreurs' ? errorItems(chs).slice(0, 20) : buildSession(chs, S.settings.goal);
+    const chs = mode === 'chapitre' ? [S.chs[chId]].filter(Boolean) : activeChs().filter((c) => !mats || !mats.length || mats.includes(c.matiereId));
+    const list = mode === 'chapitre' ? (buildSession(chs, S.settings.goal || 15).length ? buildSession(chs, S.settings.goal || 15) : randomItems(chs, S.settings.goal || 15)) : mode === 'rapide' ? randomItems(chs, 20) : mode === 'erreurs' ? errorItems(chs).slice(0, 20) : buildSession(chs, S.settings.goal);
     return { list, i: 0, ok: 0, again: {}, combo: 0, best: 0 };
   });
   const [ended, setEnded] = useState(false);
@@ -193,6 +218,7 @@ export function Session({ mode, mats }) {
     if (P.lastDay !== t) { P.streak = P.lastDay === addDays(t, -1) ? (P.streak || 0) + 1 : 1; P.lastDay = t; }
     P.hist[t] = (P.hist[t] || 0) + st.list.length;
     Object.keys(P.hist).forEach((d) => { if (diffDays(d, t) > 60) delete P.hist[d]; });
+    sessionDone(st.list.length, st.ok);
     commit(); reschedule(S); setEnded(true);
   };
   if (ended) {
@@ -249,7 +275,7 @@ export function Session({ mode, mats }) {
 /* ================= Chapitre ================= */
 const TABS = [['cours', '📘 Cours'], ['fiches', '🃏 Fiches'], ['quiz', '❓ Quiz'], ['vf', '⚖️ Vrai/faux'], ['ordre', '🔢 Ordre'], ['exos', '✏️ Exos'], ['redac', '📝 Rédaction'], ['bilan', '✅ Bilan']];
 export function Chapter({ id, tab, setTab }) {
-  const { C, setModal, runAI } = useApp();
+  const { C, setModal, runAI, go } = useApp();
   const ch = S.chs[id], m = matOf(ch), p = ch.pack;
   const tabs = TABS.filter(([k]) => (k === 'ordre' ? p.ordres.length : k === 'redac' ? p.ouvertes.length : k === 'vf' ? p.vf.length : k === 'fiches' ? p.vocab.length : k === 'quiz' ? p.qcm.length : true));
   const cur = tabs.some((t) => t[0] === tab) ? tab : 'cours';
@@ -301,6 +327,7 @@ export function Chapter({ id, tab, setTab }) {
           <Text style={{ color: C.ink, fontWeight: '900' }}>{mast} %</Text>
         </View>
         <Text style={{ color: C.muted, fontSize: 12 }}>maîtrisé</Text>
+        {items(ch).length > 0 && <Btn label="🎯 Réviser ce chapitre" style={{ marginTop: 14 }} onPress={() => go({ name: 'session', mode: 'chapitre', chId: id, back: { name: 'ch', id, tab: cur } })} />}
         <View style={{ flexDirection: 'row', marginTop: 14 }}>
           <IconBtn icon="📷" label="Notes" onPress={() => setModal(<AddNotesForm id={id} />)} />
           <IconBtn icon="✨" label="Questions" onPress={() => more('q')} />

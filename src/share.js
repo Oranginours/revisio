@@ -9,6 +9,7 @@ import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast } from './ui';
 import { uid, COLORS, normPack } from './logic';
 import { reschedule } from './notifs';
 import { S, commit, matOf } from './store';
+import { flag } from './progress';
 
 const MAX_MSG = 60000; // au-delà, WhatsApp coupe le message : on passe par un fichier
 
@@ -19,6 +20,7 @@ function payload(chs) {
 // Partage d'un chapitre en message (le plus simple pour un groupe WhatsApp/Snap)
 export async function shareText(ch) {
   const data = payload([ch]);
+  flag('share'); commit();
   if (data.length > MAX_MSG) return shareFile([ch], ch.titre);
   try {
     await Share.share({ message: `📚 Chapitre « ${ch.titre} » (${matOf(ch).nom}) pour l'appli Révisions.\n👉 Appuie longtemps sur ce message → Copier, puis ouvre l'appli : elle te proposera de l'importer.\nREVISIONS:${data}` });
@@ -33,6 +35,7 @@ export async function shareFile(chs, name) {
     try { if (f.exists) f.delete(); } catch (e) {}
     f.create();
     f.write('REVISIONS:' + payload(chs));
+    flag('share'); commit();
     if (!(await Sharing.isAvailableAsync())) throw new Error("Le partage de fichiers n'est pas disponible sur ce téléphone.");
     await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: 'Partager les chapitres' });
   } catch (e) { toast('Partage impossible : ' + e.message, 'bad'); }

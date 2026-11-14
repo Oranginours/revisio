@@ -152,7 +152,10 @@ export function grade(ch, id, ok) {
   let due = addDays(today(), ok ? IV[b] : 1);
   if (ch.ds) { const dd = diffDays(today(), ch.ds); if (dd > 1 && diffDays(due, ch.ds) < 1) due = addDays(ch.ds, -1); }
   ch.srs[id] = { b, due, m: (s.m || 0) + (ok ? 0 : 1), l: ok ? 1 : 0 };
+  if (hooks.onGrade) hooks.onGrade(ok, ch);
 }
+// Branché par progress.js : XP et statistiques à chaque réponse
+export const hooks = { onGrade: null };
 export function weight(ch) {
   if (!ch.ds) return 1; const d = diffDays(today(), ch.ds);
   if (d < 0) return 0.3; if (d <= 1) return 6; if (d <= 3) return 4; if (d <= 7) return 2.5; if (d <= 14) return 1.5; return 1;

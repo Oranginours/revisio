@@ -1,6 +1,6 @@
 // Les outils d'un chapitre : fiches, quiz, vrai/faux, ordre, exercices, rédaction, bilan.
 import React, { useMemo, useState, useRef } from 'react';
-import { View, Text, Pressable, Animated, Alert } from 'react-native';
+import { View, Text, Pressable, Animated, Alert, PanResponder } from 'react-native';
 import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err, FadeIn } from './ui';
 import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase } from './logic';
 import { S, commit, matOf } from './store';
@@ -17,6 +17,21 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   const [expl, setExpl] = useState(null);
   const [menu, setMenu] = useState(false);
   const rot = useRef(new Animated.Value(0)).current;
+  // Glisser une fiche : à droite = je savais, à gauche = à revoir
+  const dragX = useRef(new Animated.Value(0)).current;
+  const gradeRef = useRef(null);
+  gradeRef.current = (ok) => { onGrade(ok); onNext(); };
+  const pan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderMove: (_, g) => dragX.setValue(g.dx),
+    onPanResponderRelease: (_, g) => {
+      if (Math.abs(g.dx) > 110 || Math.abs(g.vx) > 0.8) {
+        const ok = g.dx > 0;
+        Animated.timing(dragX, { toValue: ok ? 500 : -500, duration: 180, useNativeDriver: false }).start(() => gradeRef.current(ok));
+      } else Animated.spring(dragX, { toValue: 0, useNativeDriver: false, speed: 18, bounciness: 8 }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(dragX, { toValue: 0, useNativeDriver: false }).start(),
+  })).current;
   const order = useMemo(() => (it.t === 'q' ? shuffle(it.x.choix.map((_, i) => i)) : []), [it]);
   const x = it.x;
   // une formulation différente à chaque fois, pour la même réponse
@@ -52,12 +67,14 @@ export function Item({ it, onGrade, onNext, onSkip }) {
 
   if (it.t === 'v') {
     const turn = () => { Animated.spring(rot, { toValue: flip ? 0 : 1, useNativeDriver: true, speed: 12, bounciness: 6 }).start(); setFlip(!flip); };
+    const answer = (ok) => { onGrade(ok); onNext(); };
     const face = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 20, backfaceVisibility: 'hidden' };
     const front = rot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
     const back = rot.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
     return (
       <View>
         {head}
+        <Animated.View {...pan.panHandlers} style={{ transform: [{ translateX: dragX }, { rotate: dragX.interpolate({ inputRange: [-300, 0, 300], outputRange: ['-12deg', '0deg', '12deg'] }) }] }}>
         <Pressable onPress={turn} style={{ height: 230, marginVertical: 8 }}>
           <Animated.View style={[face, { backgroundColor: C.pri, transform: [{ perspective: 1000 }, { rotateY: front }] }]}>
             <Rich style={{ color: '#fff', fontSize: 23, fontWeight: '800', textAlign: 'center', lineHeight: 30 }}>{x.terme}</Rich>
@@ -66,10 +83,18 @@ export function Item({ it, onGrade, onNext, onSkip }) {
           <Animated.View style={[face, { backgroundColor: C.priSoft, transform: [{ perspective: 1000 }, { rotateY: back }] }]}>
             <Rich style={{ fontSize: 17, textAlign: 'center', lineHeight: 25 }}>{x.def}</Rich>
           </Animated.View>
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 14, left: 14, backgroundColor: C.ok, borderRadius: 12, paddingVertical: 6, paddingHorizontal: 12, opacity: dragX.interpolate({ inputRange: [0, 90], outputRange: [0, 1], extrapolate: 'clamp' }) }}>
+            <Text style={{ color: '#fff', fontWeight: '900' }}>✓ Je savais</Text>
+          </Animated.View>
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 14, right: 14, backgroundColor: C.bad, borderRadius: 12, paddingVertical: 6, paddingHorizontal: 12, opacity: dragX.interpolate({ inputRange: [-90, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }}>
+            <Text style={{ color: '#fff', fontWeight: '900' }}>↺ À revoir</Text>
+          </Animated.View>
         </Pressable>
+        </Animated.View>
+        <Text style={{ color: C.muted, fontSize: 12, textAlign: 'center' }}>Glisse à droite si tu savais, à gauche pour revoir</Text>
         <Row style={{ flexWrap: 'nowrap', marginTop: 6 }}>
-          <Btn flex kind="sec" label="🔁 À revoir" onPress={() => { onGrade(false); onNext(); }} />
-          <Btn flex label="✅ Je savais" onPress={() => { onGrade(true); onNext(); }} />
+          <Btn flex kind="sec" label="🔁 À revoir" onPress={() => answer(false)} />
+          <Btn flex label="✅ Je savais" onPress={() => answer(true)} />
         </Row>
       </View>
     );

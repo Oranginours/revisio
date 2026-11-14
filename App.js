@@ -9,6 +9,8 @@ import { checkClipboard } from './src/share';
 import { silentRefresh, Edt, Notes } from './src/school';
 import { Home, Session, sessionTitle, Chapter, Settings } from './src/screens';
 import { Train, Tool, TOOL_TITLES } from './src/tools';
+import './src/progress';
+import { Progres } from './src/progres-screen';
 
 const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]];
 const TOP = NAV.map((n) => n[0]);
@@ -42,7 +44,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const back = () => setView({ name: view.back || 'home' });
+  const back = () => { const b = view.back; setView(b && typeof b === 'object' ? b : { name: b || 'home' }); };
   useEffect(() => {
     const h = BackHandler.addEventListener('hardwareBackPress', () => {
       if (busy) return true;
@@ -68,10 +70,11 @@ export default function App() {
   if (v.name === 'edt') { title = 'Emploi du temps'; screen = <Edt />; }
   if (v.name === 'notes') { title = 'Mes notes'; screen = <Notes />; }
   if (v.name === 'train') { title = "S'entraîner"; screen = <Train />; }
-  if (v.name === 'session') { title = sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} />; }
+  if (v.name === 'session') { title = v.mode === 'chapitre' && S.chs[v.chId] ? '🎯 ' + S.chs[v.chId].titre : sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} chId={v.chId} />; }
   if (v.name === 'tool') { title = TOOL_TITLES[v.tool] || 'Outil'; screen = <Tool tool={v.tool} mats={v.mats} />; }
   if (v.name === 'ch') { title = S.chs[v.id].titre; screen = <Chapter id={v.id} tab={v.tab} setTab={(t) => setView({ ...v, tab: t })} />; }
   if (v.name === 'settings') { title = 'Réglages'; screen = <Settings />; }
+  if (v.name === 'progres') { title = 'Mes progrès'; screen = <Progres />; }
   const isTop = TOP.includes(v.name);
 
   return (

@@ -35,7 +35,9 @@ export function persistSoon() { clearTimeout(timer); timer = setTimeout(persistN
 let refresher = () => {};
 export const setRefresher = (f) => { refresher = f; };
 // À appeler après chaque modification : rafraîchit l'écran et sauvegarde.
-export function commit() { refresher(); persistSoon(); }
+let afterCommit = null;
+export const setAfterCommit = (f) => { afterCommit = f; };
+export function commit() { if (afterCommit) afterCommit(); refresher(); persistSoon(); }
 
 export const matOf = (ch) => S.profil.matieres.find((m) => m.id === ch.matiereId) || { id: '', nom: '?', couleur: '#888' };
 export const chaptersOf = (mid) => Object.values(S.chs).filter((c) => c.matiereId === mid);

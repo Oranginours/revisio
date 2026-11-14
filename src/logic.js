@@ -294,3 +294,25 @@ export function applyVariants(ch, r) {
   ((r && r.vf) || []).forEach((o) => { const f = p.vf[o && o.i]; if (!f) return; const v = str(o.variantes); if (v.length) { f.variantes = v; n++; } });
   return n;
 }
+
+/* ---------- plan de révision avant le DS ---------- */
+// Une tâche par jour, de J-7 (au plus) jusqu'au jour du DS
+export function planFor(ch, from = today()) {
+  if (!ch.ds) return [];
+  const n = diffDays(from, ch.ds);
+  if (n < 0 || n > 21) return [];
+  const p = ch.pack || {};
+  const hasEx = (p.exercices || []).length > 0, hasRed = (p.ouvertes || []).length > 0;
+  const task = (d) => {
+    if (d === 0) return ['☀️', 'Le matin : 10 min de fiches, rien de nouveau. Tu es prêt !'];
+    if (d === 1) return ['🌙', 'Relis le cours, fais le défi 60 s, puis couche-toi tôt 😴'];
+    if (d === 2) return ['❌', 'Revois tes erreurs' + (hasRed ? ' et fais une rédaction' : '')];
+    if (d === 3) return ['📝', 'Examen blanc : repère ce qui reste à revoir'];
+    if (d === 4 && hasEx) return ['✏️', 'Exercices : refais-en au moins 5'];
+    if (d % 2 === 0) return ['❓', 'Quiz + vrai/faux du chapitre'];
+    return ['🃏', 'Fiches du chapitre (glisse-les toutes)'];
+  };
+  const out = [];
+  for (let d = Math.min(n, 7); d >= 0; d--) out.push({ date: addDays(ch.ds, -d), d, icon: task(d)[0], text: task(d)[1] });
+  return out;
+}

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop, toast, ACCENTS, makeTheme } from './ui';
-import { today, addDays, diffDays, fmtDate, longDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
+import { planFor, today, addDays, diffDays, fmtDate, longDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
 import { gemini, DEFAULT_MODEL } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
 import { Item, skipItem, TCours, TFiches, TPractice, TOrdre, TExos, TRedac, TBilan } from './tabs';
@@ -88,6 +88,7 @@ export function Home() {
         </View>
       </FadeIn>
 
+      <GettingStarted />
       <NextLesson />
       <LevelRow />
 
@@ -161,6 +162,74 @@ export function Home() {
         <Txt muted style={{ marginTop: 4 }}>{tip[1]}</Txt>
       </Card>
     </View>
+  );
+}
+
+// Plan jour par jour jusqu'au DS (affiché dans le chapitre)
+function PlanCard({ ch }) {
+  const { C } = useApp();
+  const [open, setOpen] = useState(false);
+  const plan = planFor(ch);
+  if (!plan.length) return null;
+  const t = today();
+  ch.plan = ch.plan || {};
+  const cur = plan.find((p) => p.date === t) || plan.find((p) => p.date > t) || plan[plan.length - 1];
+  const done = plan.filter((p) => ch.plan[p.date]).length;
+  const Line = ({ p }) => {
+    const ok = !!ch.plan[p.date], isToday = p.date === t, past = p.date < t;
+    return (
+      <Pressable onPress={() => { ch.plan[p.date] = !ok; commit(); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, opacity: past && !ok ? 0.5 : 1 }}>
+        <View style={{ width: 26, height: 26, borderRadius: 9, borderWidth: 2, borderColor: ok ? C.ok : C.line, backgroundColor: ok ? C.ok : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+          {ok ? <Text style={{ color: '#fff', fontWeight: '900' }}>✓</Text> : null}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: isToday ? C.pri : C.muted, fontWeight: '800', fontSize: 12 }}>{isToday ? "AUJOURD'HUI" : p.d === 0 ? 'JOUR DU DS' : 'J-' + p.d + ' · ' + fmtDate(p.date).toUpperCase()}</Text>
+          <Text style={{ color: C.ink, textDecorationLine: ok ? 'line-through' : 'none' }}>{p.icon} {p.text}</Text>
+        </View>
+      </Pressable>
+    );
+  };
+  return (
+    <Card>
+      <Pressable onPress={() => setOpen(!open)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ flex: 1, color: C.ink, fontWeight: '900', fontSize: 17 }}>🗓️ Mon plan avant le DS</Text>
+        <Text style={{ color: C.muted, fontWeight: '700' }}>{done}/{plan.length} {open ? '▲' : '▼'}</Text>
+      </Pressable>
+      {open ? plan.map((p) => <Line key={p.date} p={p} />) : <Line p={cur} />}
+    </Card>
+  );
+}
+
+// Premiers pas : une petite liste à cocher tant que tout n'est pas prêt
+function GettingStarted() {
+  const { C, go, setModal } = useApp();
+  if (S.profil.onboarded) return null;
+  const steps = [
+    ['👋', 'Dis-moi ton prénom', !!(S.profil.prenom || (S.pronote && S.pronote.name)), () => go({ name: 'settings', back: 'home' })],
+    ['🏫', 'Connecte Pronote (matières auto)', !!S.pronote, () => setModal(<QrLogin />)],
+    ['🤖', 'Ajoute ta clé IA gratuite', !!S.settings.apiKey, () => go({ name: 'settings', back: 'home' })],
+    ['📷', 'Crée ton premier chapitre', Object.keys(S.chs).length > 0, () => setModal(<ChapitreForm />)],
+    ['🎯', 'Fais ta première session', ((S.profil.stats || {}).sessions || 0) > 0, () => setModal(<SessionSetup />)],
+  ];
+  const n = steps.filter((x) => x[2]).length;
+  if (n === steps.length) { S.profil.onboarded = true; return null; }
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ flex: 1, color: C.ink, fontWeight: '900', fontSize: 17 }}>🚀 Bien démarrer · {n}/{steps.length}</Text>
+        <Pressable onPress={() => { S.profil.onboarded = true; commit(); }} hitSlop={10}><Text style={{ color: C.muted, fontSize: 13 }}>Masquer</Text></Pressable>
+      </View>
+      <Progress value={(n / steps.length) * 100} height={8} />
+      {steps.map(([icon, label, ok, act]) => (
+        <Pressable key={label} onPress={ok ? undefined : act} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+          <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: ok ? C.ok : C.priSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontWeight: '900' }}>{ok ? '✓' : ''}</Text>{!ok ? <Text style={{ position: 'absolute', fontSize: 15 }}>{icon}</Text> : null}
+          </View>
+          <Text style={{ flex: 1, color: ok ? C.muted : C.ink, fontWeight: ok ? '500' : '700', textDecorationLine: ok ? 'line-through' : 'none' }}>{label}</Text>
+          {!ok && <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>}
+        </Pressable>
+      ))}
+    </Card>
   );
 }
 
@@ -344,6 +413,7 @@ export function Chapter({ id, tab, setTab }) {
           <IconBtn icon="⚙️" label="Réglages" onPress={() => setModal(<ChSettings id={id} />)} />
         </View>
       </Card>
+      {!isArchived(ch) && <PlanCard ch={ch} />}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
         {tabs.map(([k, l]) => (
           <Pressable key={k} onPress={() => setTab(k)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 99, backgroundColor: k === cur ? C.pri : C.card, borderWidth: k === cur ? 0 : 1, borderColor: C.line }}>

@@ -11,6 +11,7 @@ import { Home, Session, sessionTitle, Chapter, Settings } from './src/screens';
 import { Train, Tool, TOOL_TITLES } from './src/tools';
 import './src/progress';
 import { Progres } from './src/progres-screen';
+import { Search } from './src/search';
 
 const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]];
 const TOP = NAV.map((n) => n[0]);
@@ -75,6 +76,7 @@ export default function App() {
   if (v.name === 'ch') { title = S.chs[v.id].titre; screen = <Chapter id={v.id} tab={v.tab} setTab={(t) => setView({ ...v, tab: t })} />; }
   if (v.name === 'settings') { title = 'Réglages'; screen = <Settings />; }
   if (v.name === 'progres') { title = 'Mes progrès'; screen = <Progres />; }
+  if (v.name === 'search') { title = 'Rechercher'; screen = <Search />; }
   const isTop = TOP.includes(v.name);
 
   return (
@@ -89,7 +91,7 @@ export default function App() {
               <Text style={{ fontSize: 24, fontWeight: '800', letterSpacing: -1, color: C.ink }}>révisio</Text>
             </View>
           ) : <Text numberOfLines={1} style={{ flex: 1, fontSize: isTop ? 26 : 20, fontWeight: '900', letterSpacing: -0.6, color: C.ink }}>{title}</Text>}
-          {isTop && v.name !== 'home' && <Chip>🔥 {S.profil.streak || 0}</Chip>}
+          {isTop && <Pressable onPress={() => go({ name: 'search', back: v.name })} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 17 }}>🔍</Text></Pressable>}
           {isTop && <Pressable onPress={() => go({ name: 'settings', back: v.name })} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 18 }}>⚙️</Text></Pressable>}
         </View>
         <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled"

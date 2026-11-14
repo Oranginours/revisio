@@ -247,14 +247,21 @@ export function Edt() {
     <View>
       <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginBottom: 10 }}>
         <Btn small kind="ghost" label="‹" onPress={() => shift(-1)} />
-        <Txt bold>Semaine du {fmtDate(key)}</Txt>
+        <View style={{ alignItems: 'center' }}>
+          <Txt bold>Semaine du {fmtDate(key)}</Txt>
+          {key !== dstr(mondayOf(new Date())) && (
+            <Pressable hitSlop={8} onPress={() => { setMonday(mondayOf(new Date())); const g = (new Date().getDay() + 6) % 7; setDay(g > 4 ? 0 : g); }}>
+              <Text style={{ color: C.pri, fontWeight: '800', fontSize: 13 }}>↺ Revenir à aujourd'hui</Text>
+            </Pressable>
+          )}
+        </View>
         <Btn small kind="ghost" label="›" onPress={() => shift(1)} />
       </Row>
       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
         {days.slice(0, hasSat ? 6 : 5).map((d, i) => {
           const n = ((week && week.lessons) || []).filter((l) => dstr(new Date(l.start)) === d && l.test).length;
           return (
-            <Pressable key={d} onPress={() => setDay(i)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center', backgroundColor: i === day ? C.pri : C.card, borderWidth: 1, borderColor: i === day ? C.pri : d === today() ? C.ok : C.line }}>
+            <Pressable key={d} onPress={() => setDay(i)} style={{ flex: 1, paddingVertical: 10, borderRadius: 16, alignItems: 'center', backgroundColor: i === day ? C.pri : C.card, borderWidth: i === day ? 0 : d === today() ? 2 : 1, borderColor: d === today() ? C.pri : C.line }}>
               <Text style={{ color: i === day ? '#fff' : C.ink, fontWeight: '700', fontSize: 13 }}>{['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][i]}</Text>
               <Text style={{ color: i === day ? '#fff' : C.muted, fontSize: 12 }}>{d.slice(8)}{n ? ' 📝' : ''}</Text>
             </Pressable>

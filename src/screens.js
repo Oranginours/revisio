@@ -22,17 +22,24 @@ export function Home() {
   const P = S.profil, t = today(), all = Object.values(S.chs), chs = activeChs();
   if (!P.matieres.length) {
     return (
-      <Card>
-        <H2>Bienvenue 👋</H2>
-        <Txt>Ajoute tes matières, puis pour chaque chapitre prends tes cours en photo : l'IA en fait des fiches, des quiz et des exercices. Entre la date de tes DS : chaque jour, l'appli te propose une petite session, avec plus de questions pour les DS qui approchent.</Txt>
-        <View style={{ gap: 8, marginTop: 14 }}>
-          <Btn label="Ajouter une matière" onPress={() => setModal(<MatiereForm />)} />
-          <Btn kind="sec" label="📥 Importer les chapitres d'un pote" onPress={() => setModal(<ImportForm />)} />
-          <Btn kind="sec" label="Charger les 2 chapitres d'exemple" onPress={loadExamples} />
-          {!S.pronote && <Btn kind="sec" label="🔗 Connecter Pronote" onPress={() => setModal(<QrLogin />)} />}
-        </View>
-        {!S.settings.apiKey && <Txt muted style={{ marginTop: 14 }}>Pour que l'IA lise tes photos, ajoute ta clé Gemini gratuite dans ⚙️ Réglages.</Txt>}
-      </Card>
+      <View>
+        <FadeIn>
+          <View style={{ backgroundColor: C.pri, borderRadius: 26, padding: 22, marginBottom: 14 }}>
+            <Text style={{ fontSize: 44 }}>👋</Text>
+            <Text style={{ color: '#fff', fontSize: 28, fontWeight: '900', marginTop: 6, letterSpacing: -0.6 }}>Bienvenue sur Révisio</Text>
+            <Text style={{ color: '#fff', opacity: 0.9, fontSize: 15, marginTop: 8, lineHeight: 22 }}>Prends tes cours en photo : l'IA en fait des fiches, des quiz et des exercices. Chaque jour, une petite session t'attend, avec plus de questions quand un DS approche.</Text>
+          </View>
+        </FadeIn>
+        <FadeIn delay={80}>
+          <View style={{ gap: 10 }}>
+            {!S.pronote && <Btn label="🏫 Connecter Pronote (matières auto)" onPress={() => setModal(<QrLogin />)} />}
+            <Btn kind={S.pronote ? 'pri' : 'sec'} label="＋ Ajouter une matière à la main" onPress={() => setModal(<MatiereForm />)} />
+            <Btn kind="sec" label="📥 Importer les chapitres d'un pote" onPress={() => setModal(<ImportForm />)} />
+            <Btn kind="ghost" label="Essayer avec 2 chapitres d'exemple" onPress={loadExamples} />
+          </View>
+        </FadeIn>
+        {!S.settings.apiKey && <Txt muted center style={{ marginTop: 16 }}>Pour que l'IA lise tes photos, ajoute ta clé Gemini gratuite dans ⚙️ Réglages.</Txt>}
+      </View>
     );
   }
   const sess = buildSession(chs, S.settings.goal); const done = P.lastDay === t; const by = {};

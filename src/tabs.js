@@ -22,7 +22,7 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   const gradeRef = useRef(null);
   gradeRef.current = (ok) => { onGrade(ok); onNext(); };
   const pan = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
     onPanResponderMove: (_, g) => dragX.setValue(g.dx),
     onPanResponderRelease: (_, g) => {
       if (Math.abs(g.dx) > 110 || Math.abs(g.vx) > 0.8) {
@@ -50,7 +50,7 @@ export function Item({ it, onGrade, onNext, onSkip }) {
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
         <Text style={{ flex: 1, color: C.muted, fontWeight: '700', fontSize: 13 }}>{TYPE[it.t]}</Text>
-        {onSkip ? <Pressable onPress={() => setMenu(!menu)} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: menu ? C.priSoft : 'transparent' }}>
+        {onSkip ? <Pressable onPress={() => setMenu(!menu)} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 14, backgroundColor: menu ? C.priSoft : 'transparent' }}>
           <Text style={{ color: C.muted, fontSize: 20, fontWeight: '800', lineHeight: 22 }}>⋯</Text>
         </Pressable> : null}
       </View>
@@ -152,7 +152,7 @@ export function TCours({ ch }) {
           <Pressable onLongPress={() => askSkip(ch, 'r' + i, plain(r.titre))} delayLongPress={450}>
             <Card>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.priSoft, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 30, height: 30, borderRadius: 14, backgroundColor: C.priSoft, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: C.priInk, fontWeight: '800' }}>{i + 1}</Text>
                 </View>
                 <View style={{ flex: 1 }}><Rich style={{ fontSize: 18, fontWeight: '800', lineHeight: 24 }}>{r.titre}</Rich></View>
@@ -240,8 +240,8 @@ function Match({ V, ids }) {
     const isDone = done.includes(id), isSel = sel && sel.side === side && sel.id === id, bad = flash === side + id;
     return (
       <Pressable key={side + id} onPress={() => tap(side, id)}
-        style={{ flex: 1, minHeight: 52, padding: 10, borderRadius: 10, borderWidth: 1, justifyContent: 'center', borderColor: bad ? C.bad : isSel ? C.pri : C.line, backgroundColor: isDone ? C.okSoft : isSel ? C.priSoft : C.bg, opacity: isDone ? 0.4 : 1 }}>
-        <Rich style={{ fontSize: 13, lineHeight: 18 }}>{label}</Rich>
+        style={{ flex: 1, minHeight: 52, padding: 10, borderRadius: 14, borderWidth: 1.5, justifyContent: 'center', borderColor: bad ? C.bad : isSel ? C.pri : C.line, backgroundColor: isDone ? C.okSoft : isSel ? C.priSoft : C.bg, opacity: isDone ? 0.4 : 1 }}>
+        <Rich style={{ fontSize: 13, lineHeight: 18, fontWeight: side === 'w' ? '800' : '400' }}>{label}</Rich>
       </Pressable>
     );
   };
@@ -308,7 +308,7 @@ export function TOrdre({ ch }) {
       <Txt bold style={{ marginTop: 12 }}>Ton ordre</Txt>
       {done.length ? done.map((i, p) => (
         <Pressable key={i} onPress={() => { setPool([...pool, i]); setDone(done.filter((_, q) => q !== p)); setChecked(false); setMsg(''); }}
-          style={{ flexDirection: 'row', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginVertical: 4, borderColor: checked ? (i === p ? C.ok : C.bad) : C.line, backgroundColor: checked ? (i === p ? C.okSoft : C.badSoft) : C.bg }}>
+          style={{ flexDirection: 'row', gap: 8, padding: 10, borderRadius: 14, borderWidth: 1.5, marginVertical: 4, borderColor: checked ? (i === p ? C.ok : C.bad) : C.line, backgroundColor: checked ? (i === p ? C.okSoft : C.badSoft) : C.bg }}>
           <Text style={{ color: C.pri, fontWeight: '700' }}>{p + 1}.</Text>
           <View style={{ flex: 1 }}><Rich style={{ fontSize: 15 }}>{E[i].t + (checked && E[i].d ? `  <b>(${E[i].d})</b>` : '')}</Rich></View>
         </Pressable>
@@ -316,7 +316,7 @@ export function TOrdre({ ch }) {
       <Txt bold style={{ marginTop: 12 }}>À placer</Txt>
       {pool.length ? pool.map((i) => (
         <Pressable key={i} onPress={() => { setPool(pool.filter((x) => x !== i)); setDone([...done, i]); setChecked(false); setMsg(''); }}
-          style={{ flexDirection: 'row', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg, marginVertical: 4 }}>
+          style={{ flexDirection: 'row', gap: 8, padding: 10, borderRadius: 14, borderWidth: 1.5, borderColor: C.line, backgroundColor: C.bg, marginVertical: 4 }}>
           <Text style={{ color: C.pri, fontWeight: '700' }}>＋</Text>
           <View style={{ flex: 1 }}><Rich style={{ fontSize: 15 }}>{E[i].t}</Rich></View>
         </Pressable>
@@ -419,7 +419,7 @@ export function TBilan({ ch }) {
   const exams = ch.exams || [];
   it.forEach((i) => { const b = s[i.id] ? s[i.id].b : 0; box[b === 0 ? 0 : b < 3 ? 1 : 2]++; });
   ch.auto = ch.auto || {};
-  const Stat = ({ v, l }) => <View style={{ flex: 1, minWidth: '45%', backgroundColor: C.bg, borderRadius: 10, padding: 10 }}><Text style={{ fontSize: 24, fontWeight: '800', color: C.ink }}>{v}</Text><Txt muted>{l}</Txt></View>;
+  const Stat = ({ v, l }) => <View style={{ flex: 1, minWidth: '45%', backgroundColor: C.bg, borderRadius: 14, padding: 10 }}><Text style={{ fontSize: 24, fontWeight: '800', color: C.ink }}>{v}</Text><Txt muted>{l}</Txt></View>;
   return (
     <View>
       <ChapterGrades ch={ch} />
@@ -442,7 +442,7 @@ export function TBilan({ ch }) {
               <Row style={{ marginTop: 6 }}>
                 {['☹️', '😐', '😊'].map((e, kk) => (
                   <Pressable key={kk} onPress={() => { ch.auto[i] = kk; commit(); }}
-                    style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 2, borderColor: ch.auto[i] === kk ? C.pri : 'transparent', opacity: ch.auto[i] === kk ? 1 : 0.45 }}>
+                    style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 14, borderWidth: 2, borderColor: ch.auto[i] === kk ? C.pri : 'transparent', opacity: ch.auto[i] === kk ? 1 : 0.45 }}>
                     <Text style={{ fontSize: 24 }}>{e}</Text>
                   </Pressable>
                 ))}

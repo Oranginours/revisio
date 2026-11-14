@@ -449,7 +449,7 @@ function GradePicker({ ch }) {
           const on = linked(g.id); const other = !on && chapterOfGrade(g.id);
           return (
             <Pressable key={g.id} onPress={() => { if (on) unlinkGrade(ch, g.id); else linkGrade(ch, g); setT((t) => t + 1); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 6, borderColor: on ? C.pri : C.line, backgroundColor: on ? C.priSoft : C.bg }}>
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 14, borderWidth: 1.5, marginBottom: 6, borderColor: on ? C.pri : C.line, backgroundColor: on ? C.priSoft : C.bg }}>
               <Text style={{ fontSize: 18 }}>{on ? '☑️' : '⬜'}</Text>
               <View style={{ flex: 1 }}>
                 <Txt bold>{g.comment || 'Évaluation'}</Txt>

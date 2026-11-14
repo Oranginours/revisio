@@ -9,6 +9,9 @@ export const diffDays = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Da
 const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
 const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 export const fmtDate = (s) => { const d = new Date(s + 'T12:00:00'); return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]}`; };
+const JOURS_L = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+const MOIS_L = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+export const longDate = (d = new Date()) => { const x = new Date(d); return `${JOURS_L[x.getDay()]} ${x.getDate()} ${MOIS_L[x.getMonth()]}`; };
 export const dayLetter = (s) => 'DLMMJVS'[new Date(s + 'T12:00:00').getDay()];
 // "12/12/2026", "12/12" ou "12-12-26" -> "2026-12-12" (null si invalide)
 export const parseFr = (s) => {
@@ -155,8 +158,8 @@ export function weight(ch) {
   if (d < 0) return 0.3; if (d <= 1) return 6; if (d <= 3) return 4; if (d <= 7) return 2.5; if (d <= 14) return 1.5; return 1;
 }
 export const urgent = (chs) => chs.some((c) => c.ds && diffDays(today(), c.ds) >= 0 && diffDays(today(), c.ds) <= 3);
-export function buildSession(chs) {
-  const N = urgent(chs) ? 20 : 15, t = today();
+export function buildSession(chs, goal = 15) {
+  const N = urgent(chs) ? goal + 5 : goal, t = today();
   const cand = chs.map((c) => {
     const s = c.srs || {}; const d = c.ds ? diffDays(t, c.ds) : 99;
     const its = items(c).map((i) => {

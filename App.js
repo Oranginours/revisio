@@ -1,8 +1,8 @@
 // Mes révisions : structure de l'appli (en-tête, onglets du bas, fenêtres).
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, Pressable, Modal, BackHandler, AppState, ActivityIndicator, Platform, StatusBar as RNStatusBar, useColorScheme, KeyboardAvoidingView } from 'react-native';
+import { View, Text, Image, ScrollView, Pressable, Modal, BackHandler, AppState, ActivityIndicator, Platform, StatusBar as RNStatusBar, useColorScheme, KeyboardAvoidingView, RefreshControl } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Ctx, LIGHT, DARK, Btn, Chip } from './src/ui';
+import { Ctx, makeTheme, Btn, Chip, ToastHost, pull } from './src/ui';
 import { S, load, commit, persistNow, setRefresher } from './src/store';
 import { reschedule } from './src/notifs';
 import { checkClipboard } from './src/share';
@@ -14,8 +14,12 @@ const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['
 const TOP = NAV.map((n) => n[0]);
 
 export default function App() {
-  const C = useColorScheme() === 'dark' ? DARK : LIGHT;
+  const scheme = useColorScheme();
   const [ready, setReady] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const themePref = S.settings.theme || 'auto';
+  const C = makeTheme(themePref === 'dark' || (themePref !== 'light' && scheme === 'dark'), S.settings.accent);
+  const topPad = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 50;
   const [, setTick] = useState(0);
   const [view, setView] = useState({ name: 'home' });
   const [modal, setModal] = useState(null);
@@ -72,8 +76,8 @@ export default function App() {
 
   return (
     <Ctx.Provider value={ctx}>
-      <StatusBar style={C === DARK ? 'light' : 'dark'} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 50 }}>
+      <StatusBar style={C.dark ? 'light' : 'dark'} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg, paddingTop: topPad }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 }}>
           {!isTop && <Pressable onPress={back} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 20, color: C.ink, fontWeight: '800' }}>‹</Text></Pressable>}
           {title === null ? (
@@ -85,7 +89,9 @@ export default function App() {
           {isTop && v.name !== 'home' && <Chip>🔥 {S.profil.streak || 0}</Chip>}
           {isTop && <Pressable onPress={() => go({ name: 'settings', back: v.name })} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 18 }}>⚙️</Text></Pressable>}
         </View>
-        <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled"
+          refreshControl={(v.name === 'edt' || v.name === 'notes') ? <RefreshControl refreshing={pulling} colors={[C.pri]} tintColor={C.pri}
+            onRefresh={async () => { if (!pull.fn) return; setPulling(true); try { await pull.fn(); } finally { setPulling(false); } }} /> : undefined}>
           {screen}
         </ScrollView>
         {isTop && (
@@ -119,6 +125,7 @@ export default function App() {
           {busy && <Busy title={busy.title} sub={busy.sub} C={C} />}
         </View>
       </Modal>
+      <ToastHost C={C} top={topPad} />
     </Ctx.Provider>
   );
 }
@@ -127,8 +134,9 @@ function Busy({ title, sub, C }) {
   const [s, setS] = useState(0);
   useEffect(() => { const t0 = Date.now(); const iv = setInterval(() => setS(Math.round((Date.now() - t0) / 1000)), 1000); return () => clearInterval(iv); }, []);
   return (
-    <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 400 }}>
-      <Text style={{ fontSize: 18, fontWeight: '700', color: C.ink, marginBottom: 14 }}>{title}</Text>
+    <View style={{ backgroundColor: C.card, borderRadius: 24, padding: 26, alignItems: 'center', width: '100%', maxWidth: 400 }}>
+      <Text style={{ fontSize: 34, marginBottom: 6 }}>🤖</Text>
+      <Text style={{ fontSize: 19, fontWeight: '900', color: C.ink, marginBottom: 14, textAlign: 'center' }}>{title}</Text>
       <ActivityIndicator size="large" color={C.pri} />
       <Text style={{ color: C.muted, marginTop: 14, textAlign: 'center' }}>{sub || "L'IA lit tes cours… Ça peut prendre 1 à 2 minutes. Garde l'appli ouverte."} {s} s</Text>
     </View>

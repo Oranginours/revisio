@@ -4,13 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as pronote from '@blockshub/pawnote-lts';
-import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, Label, Input, Err, Fb } from './ui';
+import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, Label, Input, Err, Fb, toast, pull } from './ui';
 import { uid, dstr, today, fmtDate, mondayOf, norm, diffDays, isArchived } from './logic';
 import { S, commit, persistNow, chaptersOf } from './store';
 import { reschedule } from './notifs';
 import { ChapitreForm, newMatiere } from './forms';
 
 /* ================= Connexion ================= */
+// Pronote donne « NOM Prénom » : on garde le prénom
+export const firstName = (n) => { const p = String(n || '').trim().split(/\s+/); return p.length > 1 ? p[p.length - 1] : p[0] || ''; };
 let SESSION = null;
 const plainRefresh = (r) => ({ url: r.url, token: r.token, username: r.username, kind: r.kind, navigatorIdentifier: r.navigatorIdentifier });
 
@@ -177,7 +179,7 @@ export function QrLogin() {
     try {
       await runAI('Connexion à Pronote', () => loginWithQr(qr, pin), 'Connexion en cours…');
       setModal(null); silentRefresh();
-      Alert.alert('Connecté ✅', `Bonjour ${S.pronote.name || ''} ! Ton emploi du temps et tes notes arrivent.`);
+      toast(`Connecté ✅ Bonjour ${firstName(S.pronote.name)} !`);
     } catch (e) { setErr('Connexion refusée (' + ((e && e.name) || '') + ' : ' + ((e && e.message) || String(e)) + '). Vérifie le code à 4 chiffres ou génère un nouveau QR code.'); setQr(null); }
   };
   return (
@@ -235,6 +237,7 @@ export function Edt() {
   const week = S.cache.edt[key];
   const load = async () => { setLoading(true); setErr(''); try { await fetchWeek(monday); } catch (e) { setErr(e.message); } setLoading(false); };
   useEffect(() => { if (S.pronote) load(); }, [key]);
+  useEffect(() => { pull.fn = load; return () => { pull.fn = null; }; });
   if (!S.pronote) return <NotConnected what="ton emploi du temps" />;
   const shift = (n) => { const m = new Date(monday); m.setDate(m.getDate() + 7 * n); setMonday(m); setDay(0); }; // nouvelle semaine : on se met sur le lundi
   const days = [...Array(6)].map((_, i) => { const d = new Date(monday); d.setDate(d.getDate() + i); return dstr(d); });
@@ -300,6 +303,7 @@ export function Notes() {
   const data = (period && S.cache.grades[period]) || Object.values(S.cache.grades)[0];
   const load = async (p) => { setLoading(true); setErr(''); try { const d = await fetchGrades(p); setPeriod(d.period); } catch (e) { setErr(e.message); } setLoading(false); };
   useEffect(() => { if (S.pronote) load(period); }, []);
+  useEffect(() => { pull.fn = () => load(data && data.period); return () => { pull.fn = null; }; });
   if (!S.pronote) return <NotConnected what="tes notes" />;
   const color = (v, out = 20) => (v === null ? C.muted : v / out >= 0.7 ? C.ok : v / out >= 0.5 ? C.warn : C.bad);
   return (

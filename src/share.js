@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
-import { useApp, H2, Txt, Btn, Row, Label, Input, Err } from './ui';
+import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast } from './ui';
 import { uid, COLORS, normPack } from './logic';
 import { reschedule } from './notifs';
 import { S, commit, matOf } from './store';
@@ -22,7 +22,7 @@ export async function shareText(ch) {
   if (data.length > MAX_MSG) return shareFile([ch], ch.titre);
   try {
     await Share.share({ message: `📚 Chapitre « ${ch.titre} » (${matOf(ch).nom}) pour l'appli Révisions.\n👉 Appuie longtemps sur ce message → Copier, puis ouvre l'appli : elle te proposera de l'importer.\nREVISIONS:${data}` });
-  } catch (e) { Alert.alert('Partage impossible', e.message); }
+  } catch (e) { toast('Partage impossible : ' + e.message, 'bad'); }
 }
 
 // Partage d'un ou plusieurs chapitres en fichier
@@ -35,7 +35,7 @@ export async function shareFile(chs, name) {
     f.write('REVISIONS:' + payload(chs));
     if (!(await Sharing.isAvailableAsync())) throw new Error("Le partage de fichiers n'est pas disponible sur ce téléphone.");
     await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: 'Partager les chapitres' });
-  } catch (e) { Alert.alert('Partage impossible', e.message); }
+  } catch (e) { toast('Partage impossible : ' + e.message, 'bad'); }
 }
 
 // Lit un texte contenant "REVISIONS:{...}" et ajoute les chapitres. Renvoie la liste des id créés.
@@ -69,7 +69,7 @@ export async function checkClipboard(go) {
     const m = t.match(/Chapitre « (.+?) »/);
     Alert.alert('📥 Chapitre copié', `Tu as copié ${m ? '« ' + m[1] + ' »' : 'un chapitre'}. L'ajouter à tes révisions ?`, [
       { text: 'Non', style: 'cancel', onPress: () => { S.imported[sig(t)] = 1; commit(); } },
-      { text: 'Importer', onPress: () => { try { const ids = importText(t); go({ name: 'ch', id: ids[0], tab: 'cours' }); } catch (e) { Alert.alert('Oups', 'Le message copié est incomplet.'); } } },
+      { text: 'Importer', onPress: () => { try { const ids = importText(t); go({ name: 'ch', id: ids[0], tab: 'cours' }); } catch (e) { toast('Le message copié est incomplet.', 'bad'); } } },
     ]);
   } catch (e) {}
 }
@@ -78,7 +78,7 @@ export function ImportForm() {
   const { setModal, go } = useApp();
   const [txt, setTxt] = useState('');
   const [err, setErr] = useState('');
-  const done = (ids) => { setModal(null); if (ids.length === 1) go({ name: 'ch', id: ids[0], tab: 'cours' }); else Alert.alert('Importé ✨', `${ids.length} chapitres ajoutés.`); };
+  const done = (ids) => { setModal(null); if (ids.length === 1) go({ name: 'ch', id: ids[0], tab: 'cours' }); else toast(`Importé ✨ ${ids.length} chapitres ajoutés`); };
   const fromText = (t) => { try { done(importText(t)); } catch (e) { setErr('Pas de chapitre valide là-dedans. Copie bien le message en entier.'); } };
   const paste = async () => { try { const t = await Clipboard.getStringAsync(); setTxt(t); fromText(t); } catch (e) { setErr('Impossible de lire le presse-papiers. Colle le message à la main.'); } };
   const pickFile = async () => {
@@ -120,4 +120,34 @@ export function ShareChoice({ ch }) {
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 16, alignSelf: 'flex-start' }} onPress={() => setModal(null)} />
     </View>
   );
+}
+
+/* ---------- sauvegarde complète (pour changer de téléphone ou réinstaller) ---------- */
+export async function exportBackup() {
+  try {
+    const data = { v: 1, kind: 'revisio-sauvegarde', at: new Date().toISOString(), profil: S.profil, chs: S.chs,
+      settings: { ...S.settings, apiKey: '' } }; // jamais la clé IA ni la connexion Pronote dans un fichier
+    const f = new File(Paths.cache, `revisio-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`);
+    try { if (f.exists) f.delete(); } catch (e) {}
+    f.create(); f.write(JSON.stringify(data));
+    await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer ma sauvegarde' });
+    S.settings.lastBackup = new Date().toISOString(); commit();
+  } catch (e) { toast('Sauvegarde impossible : ' + e.message, 'bad'); }
+}
+export async function importBackup() {
+  try {
+    const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (r.canceled) return;
+    const d = JSON.parse(await new File(r.assets[0].uri).text());
+    if (!d || d.kind !== 'revisio-sauvegarde' || !d.chs) throw new Error("ce n'est pas une sauvegarde Révisio");
+    const n = Object.keys(d.chs).length;
+    Alert.alert('Restaurer la sauvegarde ?', `${n} chapitre${n > 1 ? 's' : ''} du ${String(d.at).slice(0, 10)}. Tes données actuelles seront remplacées.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Restaurer', style: 'destructive', onPress: () => {
+        const key = S.settings.apiKey;
+        Object.assign(S.profil, d.profil || {}); S.chs = d.chs; Object.assign(S.settings, d.settings || {}, { apiKey: key });
+        commit(); reschedule(S); toast('Sauvegarde restaurée ✅');
+      } },
+    ]);
+  } catch (e) { toast('Restauration impossible : ' + e.message, 'bad'); }
 }

@@ -2,15 +2,15 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
-import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop } from './ui';
-import { today, addDays, diffDays, fmtDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
+import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop, toast, ACCENTS, makeTheme } from './ui';
+import { today, addDays, diffDays, fmtDate, longDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
 import { gemini, DEFAULT_MODEL } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
 import { Item, skipItem, TCours, TFiches, TPractice, TOrdre, TExos, TRedac, TBilan } from './tabs';
 import { S, commit, matOf, activeChs } from './store';
 import { MatiereForm, ChapitreForm, AddNotesForm, ChSettings, loadExamples } from './forms';
-import { ImportForm, ShareChoice } from './share';
-import { DsDetected, QrLogin, logoutPronote } from './school';
+import { ImportForm, ShareChoice, exportBackup, importBackup } from './share';
+import { DsDetected, QrLogin, logoutPronote, firstName } from './school';
 import { tipOfDay } from './tools';
 
 /* ================= Accueil ================= */
@@ -34,13 +34,20 @@ export function Home() {
       </Card>
     );
   }
-  const sess = buildSession(chs); const done = P.lastDay === t; const by = {};
+  const sess = buildSession(chs, S.settings.goal); const done = P.lastDay === t; const by = {};
   sess.forEach((i) => { const m = matOf(i.ch); by[m.nom] = by[m.nom] || { n: 0, c: m.couleur }; by[m.nom].n++; });
   const up = chs.filter((c) => c.ds && diffDays(t, c.ds) >= 0).sort((a, b) => (a.ds < b.ds ? -1 : 1));
   const week = [...Array(7)].map((_, i) => addDays(t, i - 6));
   const tip = tipOfDay();
+  const name = S.profil.prenom || firstName(S.pronote && S.pronote.name);
+  const hour = new Date().getHours();
+  const hello = hour < 5 ? 'Encore debout' : hour < 12 ? 'Salut' : hour < 18 ? 'Hello' : 'Bonsoir';
   return (
     <View>
+      <View style={{ marginBottom: 12, marginTop: 2 }}>
+        <Text style={{ color: C.ink, fontSize: 26, fontWeight: '900', letterSpacing: -0.6 }}>{hello}{name ? ' ' + name : ''} 👋</Text>
+        <Text style={{ color: C.muted, fontSize: 14, fontWeight: '600', marginTop: 2 }}>{longDate()}</Text>
+      </View>
       <FadeIn>
         <View style={{ backgroundColor: C.pri, borderRadius: 24, padding: 20, marginBottom: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -151,7 +158,7 @@ function SessionSetup() {
   const { setModal, go } = useApp();
   const [mats, setMats] = useState([]);
   const chs = activeChs().filter((c) => !mats.length || mats.includes(c.matiereId));
-  const n = buildSession(chs).length;
+  const n = buildSession(chs, S.settings.goal).length;
   const toggle = (id) => setMats(mats.includes(id) ? mats.filter((x) => x !== id) : [...mats, id]);
   return (
     <View>
@@ -176,7 +183,7 @@ export function Session({ mode, mats }) {
   const { go, C } = useApp();
   const [st, setSt] = useState(() => {
     const chs = activeChs().filter((c) => !mats || !mats.length || mats.includes(c.matiereId));
-    const list = mode === 'rapide' ? randomItems(chs, 20) : mode === 'erreurs' ? errorItems(chs).slice(0, 20) : buildSession(chs);
+    const list = mode === 'rapide' ? randomItems(chs, 20) : mode === 'erreurs' ? errorItems(chs).slice(0, 20) : buildSession(chs, S.settings.goal);
     return { list, i: 0, ok: 0, again: {}, combo: 0, best: 0 };
   });
   const [ended, setEnded] = useState(false);
@@ -247,19 +254,19 @@ export function Chapter({ id, tab, setTab }) {
   const tabs = TABS.filter(([k]) => (k === 'ordre' ? p.ordres.length : k === 'redac' ? p.ouvertes.length : k === 'vf' ? p.vf.length : k === 'fiches' ? p.vocab.length : k === 'quiz' ? p.qcm.length : true));
   const cur = tabs.some((t) => t[0] === tab) ? tab : 'cours';
   const more = async (kind) => {
-    if (!S.settings.apiKey) return Alert.alert('Clé manquante', "Ajoute ta clé Gemini dans ⚙️ Réglages.");
+    if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
     try {
       const add = normPack(await runAI(kind === 'ex' ? 'Nouveaux exercices' : 'Nouvelles questions', () => gemini({ apiKey: S.settings.apiKey, model: S.settings.model, prompt: promptMore(ch, m.nom, kind) })));
       const n = add.qcm.length + add.vf.length + add.exercices.length;
       if (!n) throw new Error("L'IA n'a pas renvoyé de questions. Réessaie.");
       ch.pack = mergePack(ch.pack, { qcm: add.qcm, vf: add.vf, exercices: add.exercices }); commit();
-      Alert.alert('✨ Ajouté', `${n} nouvelles questions.`);
-    } catch (e) { Alert.alert('Oups', e.message); }
+      toast(`✨ ${n} nouvelles questions ajoutées`);
+    } catch (e) { toast(e.message, 'bad'); }
   };
   const vary = async () => {
-    if (!S.settings.apiKey) return Alert.alert('Clé manquante', "Ajoute ta clé Gemini dans ⚙️ Réglages.");
+    if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
     const qIdx = p.qcm.map((_, i) => i), fIdx = p.vf.map((_, i) => i);
-    if (!qIdx.length && !fIdx.length) return Alert.alert('Rien à varier', "Ce chapitre n'a pas encore de questions.");
+    if (!qIdx.length && !fIdx.length) return toast("Ce chapitre n'a pas encore de questions.", 'info');
     try {
       let n = 0;
       await runAI('Nouvelles formulations', async () => {
@@ -269,8 +276,8 @@ export function Chapter({ id, tab, setTab }) {
         }
       }, "L'IA reformule tes questions et équilibre les réponses…");
       commit();
-      Alert.alert('🔀 C\'est fait', `${n} questions ont maintenant plusieurs formulations, et les choix des QCM ont la même longueur.`);
-    } catch (e) { Alert.alert('Oups', e.message); }
+      toast(`🔀 ${n} questions reformulées, choix équilibrés`);
+    } catch (e) { toast(e.message, 'bad'); }
   };
   const Tab = { cours: TCours, fiches: TFiches, quiz: TPractice, vf: TPractice, ordre: TOrdre, exos: TExos, redac: TRedac, bilan: TBilan }[cur];
   const size = items(ch, true).length + p.exercices.length;
@@ -315,6 +322,20 @@ export function Chapter({ id, tab, setTab }) {
 }
 
 /* ================= Réglages ================= */
+// Petit sélecteur en « pastilles »
+function Seg({ options, value, onChange }) {
+  const { C } = useApp();
+  return (
+    <View style={{ flexDirection: 'row', backgroundColor: C.bg, borderRadius: 14, padding: 4, gap: 4 }}>
+      {options.map(([v, l]) => (
+        <Pressable key={String(v)} onPress={() => onChange(v)} style={{ flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center', backgroundColor: value === v ? C.card : 'transparent',
+          shadowColor: '#000', shadowOpacity: value === v && !C.dark ? 0.08 : 0, shadowRadius: 4, elevation: value === v && !C.dark ? 1 : 0 }}>
+          <Text style={{ color: value === v ? C.ink : C.muted, fontWeight: value === v ? '800' : '600', fontSize: 14 }}>{l}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 export function Settings() {
   const { C, setModal } = useApp();
   const st = S.settings;
@@ -322,29 +343,59 @@ export function Settings() {
   const [show, setShow] = useState(false);
   const [model, setModel] = useState(st.model);
   const [time, setTime] = useState(st.notifTime);
+  const [prenom, setPrenom] = useState(S.profil.prenom || '');
   const [err, setErr] = useState('');
-  const [msg, setMsg] = useState('');
-  const saveAI = () => { st.apiKey = key.trim(); st.model = model.trim() || DEFAULT_MODEL; commit(); setMsg('Enregistré ✅'); };
+  const set = (k, v) => { st[k] = v; commit(); };
+  const saveAI = () => { st.apiKey = key.trim(); st.model = model.trim() || DEFAULT_MODEL; commit(); toast('Clé enregistrée ✅'); };
   const toggle = async (v) => {
-    if (v && !(await askPermission())) { Alert.alert('Notifications bloquées', "Autorise les notifications pour l'appli dans les réglages du téléphone."); return; }
+    if (v && !(await askPermission())) { toast("Autorise les notifications pour l'appli dans les réglages du téléphone.", 'bad'); return; }
     st.notifOn = v; commit(); reschedule(S);
   };
   const saveTime = () => {
     const mm = time.trim().match(/^(\d{1,2})[:hH](\d{2})?$/);
     if (!mm || +mm[1] > 23 || +(mm[2] || 0) > 59) return setErr("Écris l'heure comme 18:30.");
-    st.notifTime = String(+mm[1]).padStart(2, '0') + ':' + (mm[2] || '00'); setTime(st.notifTime); setErr(''); commit(); reschedule(S); setMsg('Heure enregistrée ✅');
+    st.notifTime = String(+mm[1]).padStart(2, '0') + ':' + (mm[2] || '00'); setTime(st.notifTime); setErr(''); commit(); reschedule(S); toast('Rappel à ' + st.notifTime.replace(':', 'h') + ' ✅');
   };
   const checkUpdate = async () => {
     try {
-      if (!Updates.isEnabled) return setMsg("Les mises à jour ne marchent que dans l'APK installée.");
-      setMsg('Recherche…');
+      if (!Updates.isEnabled) return toast("Les mises à jour ne marchent que dans l'APK installée.", 'info');
+      toast('Recherche…', 'info');
       const r = await Updates.checkForUpdateAsync();
-      if (!r.isAvailable) return setMsg('Tu as déjà la dernière version ✅');
+      if (!r.isAvailable) return toast('Tu as déjà la dernière version ✅');
       await Updates.fetchUpdateAsync(); await Updates.reloadAsync();
-    } catch (e) { setMsg('Impossible de vérifier (pas internet ?).'); }
+    } catch (e) { toast('Impossible de vérifier (pas internet ?)', 'bad'); }
   };
+  const Section = ({ children }) => <Text style={{ color: C.muted, fontWeight: '800', fontSize: 13, letterSpacing: 0.5, marginTop: 8, marginBottom: 8, marginLeft: 4 }}>{children}</Text>;
   return (
     <View>
+      <Section>TOI</Section>
+      <Card>
+        <Label>Ton prénom</Label>
+        <Input value={prenom} onChangeText={setPrenom} onBlur={() => { S.profil.prenom = prenom.trim(); commit(); }} placeholder={firstName(S.pronote && S.pronote.name) || 'Ton prénom'} />
+        <Label>Objectif par jour</Label>
+        <Seg options={[[10, '10'], [15, '15'], [20, '20'], [30, '30']]} value={st.goal || 15} onChange={(v) => { set('goal', v); toast(`Objectif : ${v} questions par jour 🎯`); }} />
+        <Txt muted style={{ marginTop: 8 }}>Questions dans ta session du jour (+5 quand un DS est dans 3 jours ou moins).</Txt>
+      </Card>
+
+      <Section>APPARENCE</Section>
+      <Card>
+        <Label>Thème</Label>
+        <Seg options={[['auto', 'Auto'], ['light', '☀️ Clair'], ['dark', '🌙 Sombre']]} value={st.theme || 'auto'} onChange={(v) => set('theme', v)} />
+        <Label>Couleur</Label>
+        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          {ACCENTS.map(([name, hex]) => {
+            const on = (st.accent || 'indigo') === name;
+            return (
+              <Pressable key={name} onPress={() => set('accent', name)} accessibilityLabel={'Couleur ' + name}
+                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: makeTheme(C.dark, name).pri, alignItems: 'center', justifyContent: 'center', borderWidth: on ? 3 : 0, borderColor: C.ink }}>
+                {on ? <Text style={{ color: '#fff', fontWeight: '900', fontSize: 18 }}>✓</Text> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
+
+      <Section>ÉCOLE</Section>
       <Card>
         <H2>🏫 Pronote</H2>
         {S.pronote ? (
@@ -355,29 +406,32 @@ export function Settings() {
           </View>
         ) : (
           <View>
-            <Txt muted>Pour voir ton emploi du temps et tes notes, et repérer tes DS automatiquement.</Txt>
+            <Txt muted>Emploi du temps, notes, matières et DS repérés automatiquement.</Txt>
             <Btn small label="🔗 Connecter Pronote (QR code)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => setModal(<QrLogin />)} />
           </View>
         )}
       </Card>
+
+      <Section>INTELLIGENCE ARTIFICIELLE</Section>
       <Card>
-        <H2>🤖 Intelligence artificielle</H2>
-        <Txt muted>L'IA lit tes photos et crée les questions. Elle a besoin d'internet et d'une clé Gemini. Ta clé reste sur ton téléphone : elle n'est jamais envoyée quand tu partages un chapitre.</Txt>
+        <Txt muted>L'IA lit tes photos et crée les questions. Elle a besoin d'internet et d'une clé Gemini. Ta clé reste sur ton téléphone : elle n'est jamais partagée.</Txt>
         <Btn kind="sec" small label="Obtenir une clé (aistudio.google.com)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => Linking.openURL('https://aistudio.google.com/apikey')} />
-        <Label>Clé API Gemini</Label>
+        <Label>Clé API Gemini {st.apiKey ? '✅' : ''}</Label>
         <Row style={{ flexWrap: 'nowrap' }}>
-          <Input style={{ flex: 1 }} value={key} onChangeText={(t) => { setKey(t); setMsg(''); }} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder="AIza…" />
+          <Input style={{ flex: 1 }} value={key} onChangeText={setKey} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder="AIza…" />
           <Btn small kind="ghost" label={show ? '🙈' : '👁️'} onPress={() => setShow(!show)} />
         </Row>
-        <Label>Modèle (change-le seulement si l'IA dit « modèle introuvable »)</Label>
-        <Input value={model} onChangeText={(t) => { setModel(t); setMsg(''); }} autoCapitalize="none" autoCorrect={false} />
+        <Label>Modèle</Label>
+        <Input value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} />
+        <Txt muted style={{ marginTop: 6, fontSize: 12 }}>Change-le seulement si l'IA dit « modèle introuvable ».</Txt>
         <Btn label="Enregistrer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={saveAI} />
       </Card>
+
+      <Section>RAPPELS</Section>
       <Card>
-        <H2>🔔 Rappels</H2>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
           <Txt style={{ flex: 1 }}>Me rappeler de réviser chaque jour</Txt>
-          <Switch value={!!st.notifOn} onValueChange={toggle} />
+          <Switch value={!!st.notifOn} onValueChange={toggle} trackColor={{ true: C.pri }} />
         </Row>
         <Label>Heure du rappel</Label>
         <Row style={{ flexWrap: 'nowrap' }}>
@@ -385,17 +439,27 @@ export function Settings() {
           <Btn small label="OK" onPress={saveTime} />
         </Row>
         <Err>{err}</Err>
-        <Txt muted style={{ marginTop: 8 }}>Le rappel saute les jours où ta session est déjà faite, et te prévient quand un DS approche.</Txt>
-        <Btn kind="sec" small label="Tester une notification (5 s)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={async () => { if (await askPermission()) { await testNotification(); setMsg('Notification dans 5 secondes…'); } }} />
+        <Txt muted style={{ marginTop: 8 }}>Le rappel saute les jours où ta session est faite, et te prévient quand un DS approche.</Txt>
+        <Btn kind="sec" small label="Tester (notification dans 5 s)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={async () => { if (await askPermission()) { await testNotification(); toast('Notification dans 5 secondes…', 'info'); } }} />
       </Card>
-      {msg ? <Txt style={{ color: C.ok, marginBottom: 10 }}>{msg}</Txt> : null}
+
+      <Section>SAUVEGARDE</Section>
       <Card>
-        <H2>📲 Appli</H2>
+        <Txt muted>Garde une copie de tes chapitres et de ta progression (Drive, Discord, e-mail…). Utile si tu changes de téléphone ou réinstalles l'appli.{st.lastBackup ? ` Dernière sauvegarde : ${fmtDate(st.lastBackup.slice(0, 10))}.` : ''}</Txt>
+        <Row style={{ marginTop: 10 }}>
+          <Btn small label="💾 Sauvegarder" onPress={exportBackup} />
+          <Btn small kind="sec" label="♻️ Restaurer" onPress={importBackup} />
+        </Row>
+      </Card>
+
+      <Section>APPLI</Section>
+      <Card>
         <Txt muted>Les mises à jour s'installent toutes seules au démarrage (il faut parfois ouvrir l'appli deux fois).</Txt>
         <Btn kind="sec" small label="Rechercher une mise à jour" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={checkUpdate} />
-        <Txt muted style={{ marginTop: 12 }}>📴 Tout est enregistré sur ton téléphone : tu peux réviser sans internet. Seules la création de chapitres, les nouvelles questions, « Explique-moi autrement », la correction des rédactions et Pronote ont besoin d'internet.</Txt>
-        <Btn kind="sec" small label="Charger les 2 chapitres d'exemple" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={loadExamples} />
+        <Txt muted style={{ marginTop: 12 }}>📴 Tout marche sans internet, sauf l'IA (création, nouvelles questions, explications, corrections) et Pronote.</Txt>
+        <Btn kind="ghost" small label="Charger les 2 chapitres d'exemple" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={loadExamples} />
       </Card>
+      <Txt muted center style={{ marginTop: 6, fontSize: 12 }}>Révisio · fait avec Claude</Txt>
     </View>
   );
 }

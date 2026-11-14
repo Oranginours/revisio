@@ -2,9 +2,32 @@
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet, Animated, Easing } from 'react-native';
 
-// Palette du logo Révisio (indigo + lavande)
-export const LIGHT = { bg: '#F4F4F8', card: '#FFFFFF', ink: '#14151F', muted: '#6B7080', line: '#E6E7EE', pri: '#4F46E5', priSoft: '#EEF0FF', priInk: '#3730A3', soft: '#C7D2FE', ok: '#16A34A', okSoft: '#E7F7EC', bad: '#E5484D', badSoft: '#FDECEC', warn: '#B7791F', warnSoft: '#FFF6E0', shadow: 0.06 };
-export const DARK = { bg: '#0E1016', card: '#181B24', ink: '#ECEEF5', muted: '#9097A8', line: '#262A36', pri: '#7C74FF', priSoft: '#23244A', priInk: '#C7D2FE', soft: '#3B3F8F', ok: '#4ADE80', okSoft: '#16301F', bad: '#FF6B6B', badSoft: '#3A1C1C', warn: '#F5C451', warnSoft: '#3A3016', shadow: 0 };
+// Palette du logo Révisio (indigo + lavande). La couleur principale peut être changée dans les réglages.
+export const LIGHT = { bg: '#F4F4F8', card: '#FFFFFF', ink: '#14151F', muted: '#6B7080', line: '#E6E7EE', pri: '#4F46E5', priSoft: '#EEF0FF', priInk: '#3730A3', soft: '#C7D2FE', ok: '#16A34A', okSoft: '#E7F7EC', bad: '#E5484D', badSoft: '#FDECEC', warn: '#B7791F', warnSoft: '#FFF6E0', shadow: 0.06, dark: false };
+export const DARK = { bg: '#0E1016', card: '#181B24', ink: '#ECEEF5', muted: '#9097A8', line: '#262A36', pri: '#7C74FF', priSoft: '#23244A', priInk: '#C7D2FE', soft: '#3B3F8F', ok: '#4ADE80', okSoft: '#16301F', bad: '#FF6B6B', badSoft: '#3A1C1C', warn: '#F5C451', warnSoft: '#3A3016', shadow: 0, dark: true };
+export const ACCENTS = [['indigo', '#4F46E5'], ['violet', '#7C3AED'], ['bleu', '#2563EB'], ['vert', '#059669'], ['rose', '#DB2777'], ['orange', '#EA580C']];
+// Mélange deux couleurs hexadécimales (t = part de la 2e couleur)
+export function mix(a, b, t) {
+  const h = (x) => [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16));
+  const [r1, g1, b1] = h(a), [r2, g2, b2] = h(b);
+  const c = (x, y) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
+  return '#' + c(r1, r2) + c(g1, g2) + c(b1, b2);
+}
+export function makeTheme(dark, accentName) {
+  const acc = (ACCENTS.find((a) => a[0] === accentName) || ACCENTS[0])[1];
+  if (accentName === 'indigo' || !accentName) return dark ? DARK : LIGHT;
+  return dark
+    ? { ...DARK, pri: mix(acc, '#FFFFFF', 0.25), priSoft: mix(acc, '#0E1016', 0.72), priInk: mix(acc, '#FFFFFF', 0.7), soft: mix(acc, '#0E1016', 0.45) }
+    : { ...LIGHT, pri: acc, priSoft: mix(acc, '#FFFFFF', 0.9), priInk: mix(acc, '#000000', 0.35), soft: mix(acc, '#FFFFFF', 0.7) };
+}
+
+/* ---------- messages éphémères (toasts) et « tirer pour actualiser » ---------- */
+let toastFn = null;
+export const setToastFn = (f) => { toastFn = f; };
+// toast('Ajouté ✨') ou toast('Pas de connexion', 'bad')
+export const toast = (msg, kind = 'ok') => { if (toastFn) toastFn(String(msg), kind); };
+// L'écran affiché enregistre ici sa fonction d'actualisation (emploi du temps, notes)
+export const pull = { fn: null };
 
 export const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -174,4 +197,31 @@ export function Input(props) {
 export function Err({ children }) {
   const { C } = useApp();
   return children ? <Text style={{ color: C.bad, fontSize: 13, marginTop: 6, fontWeight: '600' }}>{children}</Text> : null;
+}
+
+// Affiche les toasts en haut de l'écran, en glissant
+export function ToastHost({ C, top }) {
+  const [m, setM] = React.useState(null);
+  const y = useRef(new Animated.Value(-120)).current;
+  const timer = useRef(null);
+  useEffect(() => {
+    setToastFn((msg, kind) => {
+      clearTimeout(timer.current);
+      setM({ msg, kind, k: Date.now() });
+      y.setValue(-120);
+      Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 8 }).start();
+      timer.current = setTimeout(() => Animated.timing(y, { toValue: -140, duration: 220, useNativeDriver: true }).start(() => setM(null)), kind === 'bad' ? 4200 : 2600);
+    });
+    return () => setToastFn(null);
+  }, []);
+  if (!m) return null;
+  const bg = m.kind === 'bad' ? C.bad : m.kind === 'info' ? C.ink : C.ok;
+  return (
+    <Animated.View pointerEvents="box-none" style={{ position: 'absolute', left: 14, right: 14, top: top + 6, transform: [{ translateY: y }], zIndex: 50 }}>
+      <Pressable onPress={() => Animated.timing(y, { toValue: -140, duration: 180, useNativeDriver: true }).start(() => setM(null))}
+        style={{ backgroundColor: bg, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
+        <Text style={{ color: C.dark && m.kind === 'info' ? C.bg : '#fff', fontWeight: '800', fontSize: 15 }}>{m.msg}</Text>
+      </Pressable>
+    </Animated.View>
+  );
 }

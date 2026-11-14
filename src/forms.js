@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useApp, H2, Txt, Btn, Row, Label, Input, Err } from './ui';
+import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast } from './ui';
 import { uid, parseFr, parseTime, isArchived, toFr, COLORS, normPack, mergePack, promptNotes, promptSkip, items } from './logic';
 import { gemini, prepareImage } from './ai';
 import { reschedule } from './notifs';
@@ -17,7 +17,7 @@ export function loadExamples() {
   S.chs[a] = { id: a, matiereId: h.id, titre: 'La Méditerranée médiévale', ds: '', pack: normPack(EX_HIST), srs: {}, auto: {}, created: Date.now() };
   S.chs[b] = { id: b, matiereId: pc.id, titre: 'Ch. 02 · Les solutions aqueuses', ds: '', pack: normPack(EX_PC), srs: {}, auto: {}, created: Date.now() - 1 };
   commit();
-  Alert.alert('2 chapitres ajoutés', 'Pense à mettre les dates de DS (bouton ⚙️ dans chaque chapitre).');
+  toast('2 chapitres ajoutés ✨ Pense à mettre les dates de DS (⚙️ du chapitre).');
 }
 
 export function newMatiere(nom) {
@@ -160,7 +160,7 @@ export function AddNotesForm({ id }) {
     try {
       const extra = await runAI('Ajout de tes notes', () => generate({ uris, text: txt.trim(), matiere: matOf(ch).nom, titre: ch.titre, existing: ch.pack, consigne: ch.consigne }));
       ch.pack = mergePack(ch.pack, extra); commit(); setModal(null);
-      Alert.alert('Ajouté ✨', `${extra.vocab.length + extra.qcm.length + extra.vf.length} nouvelles fiches et questions.`);
+      toast(`Ajouté ✨ ${extra.vocab.length + extra.qcm.length + extra.vf.length} nouvelles fiches et questions`);
     } catch (e) { setErr(e.message); }
   };
   return (
@@ -205,7 +205,7 @@ export function ChSettings({ id }) {
       const ids = Array.isArray(r && r.ids) ? r.ids.map(String) : [];
       ch.skip = ch.skip || {}; ids.forEach((k) => { ch.skip[k] = true; });
       commit(); setModal(null);
-      Alert.alert('Tri terminé', ids.length ? `${ids.length} élément${ids.length > 1 ? 's' : ''} masqué${ids.length > 1 ? 's' : ''}. Tu peux les rétablir dans l'onglet Cours (↩️) ou Bilan.` : "L'IA n'a rien trouvé à masquer.");
+      toast(ids.length ? `🚫 ${ids.length} élément${ids.length > 1 ? 's' : ''} masqué${ids.length > 1 ? 's' : ''} (rétablissables dans Bilan)` : "L'IA n'a rien trouvé à masquer.", ids.length ? 'ok' : 'info');
     } catch (e) { setErr(e.message); }
   };
   return (

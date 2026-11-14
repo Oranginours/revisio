@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
-import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err } from './ui';
+import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop } from './ui';
 import { today, addDays, diffDays, fmtDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
 import { gemini, DEFAULT_MODEL } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
@@ -41,27 +41,44 @@ export function Home() {
   const tip = tipOfDay();
   return (
     <View>
-      <Card>
-        <H2>Aujourd'hui</H2>
-        {!chs.length ? <Txt muted>Crée ton premier chapitre pour avoir des questions chaque jour.</Txt>
-          : !sess.length ? <Txt>✅ Rien à revoir aujourd'hui, tout est à jour. Tu peux t'entraîner dans l'onglet 🧠.</Txt>
-          : (
+      <FadeIn>
+        <View style={{ backgroundColor: C.pri, borderRadius: 24, padding: 20, marginBottom: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ flex: 1, color: '#fff', opacity: 0.85, fontWeight: '700', fontSize: 14 }}>AUJOURD'HUI</Text>
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 99, paddingVertical: 4, paddingHorizontal: 10 }}>
+              <Text style={{ color: '#fff', fontWeight: '800' }}>🔥 {P.streak || 0} jour{(P.streak || 0) > 1 ? 's' : ''}</Text>
+            </View>
+          </View>
+          {!chs.length ? (
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 10 }}>Crée ton premier chapitre pour commencer 👇</Text>
+          ) : !sess.length ? (
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 10 }}>✅ Tout est à jour !{'\n'}<Text style={{ fontSize: 15, fontWeight: '600' }}>Entraîne-toi librement dans 🧠.</Text></Text>
+          ) : (
             <View>
-              <Txt>{done ? '✅ Session du jour faite. Tu peux en refaire une en bonus.' : `${sess.length} questions t'attendent (environ ${Math.max(3, Math.round(sess.length * 0.4))} min).`}</Txt>
-              <Row style={{ marginVertical: 10 }}>{Object.entries(by).map(([n, o]) => <Chip key={n} color={o.c}>{n} · {o.n}</Chip>)}</Row>
-              <Btn label={done ? 'Session bonus' : 'Commencer ma session'} onPress={() => setModal(<SessionSetup />)} />
+              <Text style={{ color: '#fff', fontSize: 40, fontWeight: '900', marginTop: 6, letterSpacing: -1 }}>{sess.length} <Text style={{ fontSize: 18, fontWeight: '700' }}>questions</Text></Text>
+              <Text style={{ color: '#fff', opacity: 0.85, fontSize: 14 }}>{done ? 'Session faite ✅ · une session bonus ?' : `environ ${Math.max(3, Math.round(sess.length * 0.4))} minutes`}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                {Object.entries(by).map(([n, o]) => (
+                  <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 99, paddingVertical: 4, paddingHorizontal: 10 }}>
+                    <Dot color={o.c} size={8} /><Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{n} · {o.n}</Text>
+                  </View>
+                ))}
+              </View>
+              <Btn kind="white" label={done ? 'Session bonus ➜' : 'Commencer ➜'} style={{ marginTop: 16 }} onPress={() => setModal(<SessionSetup />)} />
             </View>
           )}
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 14 }}>
-          {week.map((d) => (
-            <View key={d} style={{ flex: 1, alignItems: 'center' }}>
-              <View style={{ height: 24, alignSelf: 'stretch', borderRadius: 7, backgroundColor: P.hist && P.hist[d] ? C.ok : C.line }} />
-              <Text style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{dayLetter(d)}</Text>
-            </View>
-          ))}
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 18 }}>
+            {week.map((d) => (
+              <View key={d} style={{ flex: 1, alignItems: 'center' }}>
+                <View style={{ height: 28, alignSelf: 'stretch', borderRadius: 9, backgroundColor: P.hist && P.hist[d] ? '#FFFFFF' : 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}>
+                  {P.hist && P.hist[d] ? <Text style={{ color: C.pri, fontWeight: '900' }}>✓</Text> : null}
+                </View>
+                <Text style={{ fontSize: 11, color: '#fff', opacity: d === t ? 1 : 0.7, marginTop: 4, fontWeight: d === t ? '900' : '600' }}>{dayLetter(d)}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-        <Txt muted style={{ marginTop: 8 }}>🔥 Série : {P.streak || 0} jour{(P.streak || 0) > 1 ? 's' : ''} d'affilée</Txt>
-      </Card>
+      </FadeIn>
 
       <DsDetected />
 
@@ -160,7 +177,7 @@ export function Session({ mode, mats }) {
   const [st, setSt] = useState(() => {
     const chs = activeChs().filter((c) => !mats || !mats.length || mats.includes(c.matiereId));
     const list = mode === 'rapide' ? randomItems(chs, 20) : mode === 'erreurs' ? errorItems(chs).slice(0, 20) : buildSession(chs);
-    return { list, i: 0, ok: 0, again: {} };
+    return { list, i: 0, ok: 0, again: {}, combo: 0, best: 0 };
   });
   const [ended, setEnded] = useState(false);
   if (!st.list.length) return <Card><Txt>Rien à revoir pour l'instant 🎉</Txt><Btn label="Retour" style={{ marginTop: 10 }} onPress={() => go({ name: 'home' })} /></Card>;
@@ -173,32 +190,51 @@ export function Session({ mode, mats }) {
   };
   if (ended) {
     const p = Math.round((st.ok / st.list.length) * 100);
+    const msg = p >= 90 ? 'Incroyable 🤩' : p >= 70 ? 'Très bien joué 💪' : p >= 50 ? 'Pas mal du tout 👍' : 'Chaque erreur compte 🌱';
     return (
-      <Card style={{ alignItems: 'center' }}>
-        <Text style={{ fontSize: 26, fontWeight: '800', color: C.ink }}>🎉 Terminé</Text>
-        <Txt center style={{ marginVertical: 8 }}>{st.ok} bonnes réponses sur {st.list.length} essais ({p} %)</Txt>
-        <Text style={{ fontSize: 34, fontWeight: '800', color: C.ink }}>🔥 {S.profil.streak}</Text>
-        <Txt muted center>jour{S.profil.streak > 1 ? 's' : ''} d'affilée. Reviens demain pour garder ta série.</Txt>
-        <Txt muted center style={{ marginVertical: 8 }}>Les questions ratées reviendront demain, celles que tu sais reviendront plus tard.</Txt>
-        <Btn label="Retour à l'accueil" onPress={() => go({ name: 'home' })} />
-      </Card>
+      <FadeIn>
+        <View style={{ backgroundColor: C.pri, borderRadius: 24, padding: 24, alignItems: 'center' }}>
+          <Pop trigger={1}><Text style={{ fontSize: 64 }}>🎉</Text></Pop>
+          <Text style={{ color: '#fff', fontSize: 26, fontWeight: '900', marginTop: 6 }}>{msg}</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 18, alignSelf: 'stretch' }}>
+            {[[p + ' %', 'de réussite'], ['🔥 ' + S.profil.streak, 'jours de suite'], ['⚡ ' + st.best, 'meilleur combo']].map(([v, l]) => (
+              <View key={l} style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 16, padding: 12, alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>{v}</Text>
+                <Text style={{ color: '#fff', opacity: 0.8, fontSize: 12, marginTop: 2 }}>{l}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={{ color: '#fff', opacity: 0.85, textAlign: 'center', marginTop: 16, fontSize: 14 }}>Les questions ratées reviendront demain, celles que tu sais reviendront plus tard.</Text>
+          <Btn kind="white" label="Retour à l'accueil" style={{ marginTop: 18, alignSelf: 'stretch' }} onPress={() => go({ name: 'home' })} />
+        </View>
+      </FadeIn>
     );
   }
   const it = st.list[st.i]; const m = matOf(it.ch);
   const next = () => { if (st.i + 1 >= st.list.length) finish(); else setSt({ ...st, i: st.i + 1 }); };
   return (
     <View>
-      <Progress value={(st.i / st.list.length) * 100} />
-      <Row style={{ marginBottom: 8 }}><Txt muted>{st.i + 1} / {st.list.length}</Txt><Chip color={m.couleur}>{m.nom}</Chip><Txt muted>{it.ch.titre}</Txt></Row>
-      <Card>
-        <Item key={st.i} it={it}
-          onGrade={(ok) => {
-            grade(it.ch, it.id, ok); commit();
-            if (ok) st.ok++; else if (!st.again[it.id]) { st.again[it.id] = 1; st.list.push(it); }
-          }}
-          onNext={next}
-          onSkip={() => { skipItem(it.ch, it.id); st.list = st.list.filter((x, k) => k <= st.i || x.id !== it.id || x.ch !== it.ch); next(); }} />
-      </Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1 }}><Progress value={(st.i / st.list.length) * 100} height={12} /></View>
+        <Text style={{ color: C.muted, fontWeight: '800' }}>{st.i + 1}/{st.list.length}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Chip color={m.couleur}>{m.nom}</Chip>
+        <Text style={{ flex: 1, color: C.muted, fontSize: 13 }} numberOfLines={1}>{it.ch.titre}</Text>
+        {st.combo >= 2 && <Pop trigger={st.combo}><View style={{ backgroundColor: C.warnSoft, borderRadius: 99, paddingVertical: 4, paddingHorizontal: 10 }}><Text style={{ color: C.warn, fontWeight: '900' }}>🔥 x{st.combo}</Text></View></Pop>}
+      </View>
+      <FadeIn key={st.i}>
+        <Card>
+          <Item it={it}
+            onGrade={(ok) => {
+              grade(it.ch, it.id, ok); commit();
+              if (ok) { st.ok++; st.combo++; st.best = Math.max(st.best, st.combo); } else { st.combo = 0; if (!st.again[it.id]) { st.again[it.id] = 1; st.list.push(it); } }
+              setSt({ ...st });
+            }}
+            onNext={next}
+            onSkip={() => { skipItem(it.ch, it.id); st.list = st.list.filter((x, k) => k <= st.i || x.id !== it.id || x.ch !== it.ch); next(); }} />
+        </Card>
+      </FadeIn>
     </View>
   );
 }
@@ -238,31 +274,38 @@ export function Chapter({ id, tab, setTab }) {
   };
   const Tab = { cours: TCours, fiches: TFiches, quiz: TPractice, vf: TPractice, ordre: TOrdre, exos: TExos, redac: TRedac, bilan: TBilan }[cur];
   const size = items(ch, true).length + p.exercices.length;
+  const mast = mastery(ch);
   return (
     <View>
       {isArchived(ch) && (
-        <View style={{ backgroundColor: C.warnSoft, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Txt style={{ flex: 1 }}>🗄️ Chapitre archivé : il n'apparaît plus dans tes sessions.</Txt>
+        <View style={{ backgroundColor: C.warnSoft, borderRadius: 16, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Txt style={{ flex: 1 }}>🗄️ Archivé : n'apparaît plus dans tes sessions.</Txt>
           <Btn small label="Désarchiver" onPress={() => { ch.archived = false; commit(); reschedule(S); }} />
         </View>
       )}
-      <Row style={{ marginBottom: 10 }}>
-        <Chip color={m.couleur}>{m.nom}</Chip>
-        {ch.ds ? <Chip>📅 {fmtDate(ch.ds)}{ch.dsTime ? ' à ' + ch.dsTime.replace(':', 'h') : ''}</Chip> : null}
-        <DsBadge info={dsInfo(ch.ds)} />
-        <Chip>Maîtrise {mastery(ch)} %</Chip>
-      </Row>
-      <Row style={{ marginBottom: 12 }}>
-        <Btn small kind="sec" label="📷 Notes" onPress={() => setModal(<AddNotesForm id={id} />)} />
-        <Btn small kind="sec" label="✨ + Questions" onPress={() => more('q')} />
-        <Btn small kind="sec" label="🔀 Varier" onPress={vary} />
-        <Btn small kind="sec" label="📤 Partager" onPress={() => setModal(<ShareChoice ch={ch} />)} />
-        <Btn small kind="ghost" label="⚙️" onPress={() => setModal(<ChSettings id={id} />)} />
-      </Row>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 6 }}>
+      <Card style={{ paddingBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Chip color={m.couleur}>{m.nom}</Chip>
+          <DsBadge info={dsInfo(ch.ds)} />
+          {ch.ds ? <Text style={{ color: C.muted, fontSize: 13 }}>{fmtDate(ch.ds)}{ch.dsTime ? ' · ' + ch.dsTime.replace(':', 'h') : ''}</Text> : null}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 }}>
+          <View style={{ flex: 1 }}><Progress value={mast} color={m.couleur} height={10} /></View>
+          <Text style={{ color: C.ink, fontWeight: '900' }}>{mast} %</Text>
+        </View>
+        <Text style={{ color: C.muted, fontSize: 12 }}>maîtrisé</Text>
+        <View style={{ flexDirection: 'row', marginTop: 14 }}>
+          <IconBtn icon="📷" label="Notes" onPress={() => setModal(<AddNotesForm id={id} />)} />
+          <IconBtn icon="✨" label="Questions" onPress={() => more('q')} />
+          <IconBtn icon="🔀" label="Varier" onPress={vary} />
+          <IconBtn icon="📤" label="Partager" onPress={() => setModal(<ShareChoice ch={ch} />)} />
+          <IconBtn icon="⚙️" label="Réglages" onPress={() => setModal(<ChSettings id={id} />)} />
+        </View>
+      </Card>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
         {tabs.map(([k, l]) => (
-          <Pressable key={k} onPress={() => setTab(k)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 99, borderWidth: 1, borderColor: k === cur ? C.pri : C.line, backgroundColor: k === cur ? C.pri : C.card }}>
-            <Text style={{ color: k === cur ? '#fff' : C.ink, fontSize: 14 }}>{l}</Text>
+          <Pressable key={k} onPress={() => setTab(k)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 99, backgroundColor: k === cur ? C.pri : C.card, borderWidth: k === cur ? 0 : 1, borderColor: C.line }}>
+            <Text style={{ color: k === cur ? '#fff' : C.ink, fontSize: 14, fontWeight: k === cur ? '800' : '600' }}>{l}</Text>
           </Pressable>
         ))}
       </ScrollView>

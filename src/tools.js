@@ -30,9 +30,10 @@ export function Train() {
   const nErr = errorItems(chs).length;
   const toggle = (id) => setMats(mats.includes(id) ? mats.filter((x) => x !== id) : [...mats, id]);
   const T = ({ icon, title, sub, onPress, disabled }) => (
-    <Pressable onPress={disabled ? undefined : onPress} style={{ width: '48%', backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 14, opacity: disabled ? 0.45 : 1 }}>
-      <Text style={{ fontSize: 26 }}>{icon}</Text>
-      <Text style={{ color: C.ink, fontWeight: '700', fontSize: 15, marginTop: 6 }}>{title}</Text>
+    <Pressable onPress={disabled ? undefined : onPress} style={({ pressed }) => ({ width: '48%', backgroundColor: C.card, borderWidth: C.shadow ? 0 : 1, borderColor: C.line, borderRadius: 20, padding: 16, opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.96 : 1 }],
+      shadowColor: '#1B1D3A', shadowOpacity: C.shadow, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: C.shadow ? 2 : 0 })}>
+      <View style={{ width: 46, height: 46, borderRadius: 15, backgroundColor: C.priSoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 24 }}>{icon}</Text></View>
+      <Text style={{ color: C.ink, fontWeight: '800', fontSize: 16, marginTop: 10 }}>{title}</Text>
       <Text style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{sub}</Text>
     </Pressable>
   );

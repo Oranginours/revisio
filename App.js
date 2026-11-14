@@ -61,47 +61,54 @@ export default function App() {
   if (v.name === 'ch' && !S.chs[v.id]) v = { name: 'home' };
   let title = null, screen = null;
   if (v.name === 'home') screen = <Home />;
-  if (v.name === 'edt') { title = '📅 Emploi du temps'; screen = <Edt />; }
-  if (v.name === 'notes') { title = '📊 Mes notes'; screen = <Notes />; }
-  if (v.name === 'train') { title = "🧠 S'entraîner"; screen = <Train />; }
+  if (v.name === 'edt') { title = 'Emploi du temps'; screen = <Edt />; }
+  if (v.name === 'notes') { title = 'Mes notes'; screen = <Notes />; }
+  if (v.name === 'train') { title = "S'entraîner"; screen = <Train />; }
   if (v.name === 'session') { title = sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} />; }
   if (v.name === 'tool') { title = TOOL_TITLES[v.tool] || 'Outil'; screen = <Tool tool={v.tool} mats={v.mats} />; }
   if (v.name === 'ch') { title = S.chs[v.id].titre; screen = <Chapter id={v.id} tab={v.tab} setTab={(t) => setView({ ...v, tab: t })} />; }
-  if (v.name === 'settings') { title = '⚙️ Réglages'; screen = <Settings />; }
+  if (v.name === 'settings') { title = 'Réglages'; screen = <Settings />; }
   const isTop = TOP.includes(v.name);
 
   return (
     <Ctx.Provider value={ctx}>
       <StatusBar style={C === DARK ? 'light' : 'dark'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 50 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: C.line }}>
-          {!isTop && <Btn kind="ghost" small label="←" onPress={back} />}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 }}>
+          {!isTop && <Pressable onPress={back} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 20, color: C.ink, fontWeight: '800' }}>‹</Text></Pressable>}
           {title === null ? (
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Image source={require('./assets/logo-mark.png')} style={{ width: 28, height: 32 }} resizeMode="contain" />
               <Text style={{ fontSize: 24, fontWeight: '800', letterSpacing: -1, color: C.ink }}>révisio</Text>
             </View>
-          ) : <Text numberOfLines={1} style={{ flex: 1, fontSize: 19, fontWeight: '700', color: C.ink }}>{title}</Text>}
-          {isTop && <><Chip>🔥 {S.profil.streak || 0}</Chip><Btn kind="ghost" small label="⚙️" onPress={() => go({ name: 'settings', back: v.name })} /></>}
+          ) : <Text numberOfLines={1} style={{ flex: 1, fontSize: isTop ? 26 : 20, fontWeight: '900', letterSpacing: -0.6, color: C.ink }}>{title}</Text>}
+          {isTop && v.name !== 'home' && <Chip>🔥 {S.profil.streak || 0}</Chip>}
+          {isTop && <Pressable onPress={() => go({ name: 'settings', back: v.name })} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 18 }}>⚙️</Text></Pressable>}
         </View>
-        <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ padding: 12, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           {screen}
         </ScrollView>
         {isTop && (
-          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: C.line, backgroundColor: C.card, paddingBottom: Platform.OS === 'android' ? 24 : 28 }}>
-            {NAV.map(([k, icon, label]) => (
-              <Pressable key={k} onPress={() => go({ name: k })} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
-                <Text style={{ fontSize: 20, opacity: v.name === k ? 1 : 0.5 }}>{icon}</Text>
-                <Text style={{ fontSize: 11, color: v.name === k ? C.pri : C.muted, fontWeight: v.name === k ? '700' : '400' }}>{label}</Text>
-              </Pressable>
-            ))}
+          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: C.line, backgroundColor: C.card, paddingTop: 6, paddingBottom: Platform.OS === 'android' ? 24 : 28 }}>
+            {NAV.map(([k, icon, label]) => {
+              const on = v.name === k;
+              return (
+                <Pressable key={k} onPress={() => go({ name: k })} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
+                  <View style={{ paddingHorizontal: 18, paddingVertical: 4, borderRadius: 99, backgroundColor: on ? C.priSoft : 'transparent' }}>
+                    <Text style={{ fontSize: 20, opacity: on ? 1 : 0.55 }}>{icon}</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, marginTop: 2, color: on ? C.priInk : C.muted, fontWeight: on ? '800' : '500' }}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </KeyboardAvoidingView>
       <Modal visible={!!modal} transparent animationType="slide" onRequestClose={() => setModal(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: C.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '92%' }}>
-            <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <View style={{ backgroundColor: C.card, borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: '92%' }}>
+            <View style={{ alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: C.line, marginTop: 10 }} />
+            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
               {modal || null}
             </ScrollView>
           </View>

@@ -1,7 +1,7 @@
 // Les outils d'un chapitre : fiches, quiz, vrai/faux, ordre, exercices, rédaction, bilan.
-import React, { useMemo, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
-import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err } from './ui';
+import React, { useMemo, useState, useRef } from 'react';
+import { View, Text, Pressable, Animated, Alert } from 'react-native';
+import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err, FadeIn } from './ui';
 import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase } from './logic';
 import { S, commit, matOf } from './store';
 import { gemini } from './ai';
@@ -9,11 +9,14 @@ import { ChapterGrades } from './school';
 
 /* ---------- une question (fiche, QCM ou vrai/faux) ---------- */
 // it = { t: 'v'|'q'|'f', x, id?, ch? }. onSkip : marque la question « pas à apprendre ».
+const TYPE = { v: '🃏 Fiche', q: '❓ QCM', f: '⚖️ Vrai ou faux' };
 export function Item({ it, onGrade, onNext, onSkip }) {
   const { C } = useApp();
   const [flip, setFlip] = useState(false);
   const [ans, setAns] = useState(null);
   const [expl, setExpl] = useState(null);
+  const [menu, setMenu] = useState(false);
+  const rot = useRef(new Animated.Value(0)).current;
   const order = useMemo(() => (it.t === 'q' ? shuffle(it.x.choix.map((_, i) => i)) : []), [it]);
   const x = it.x;
   // une formulation différente à chaque fois, pour la même réponse
@@ -27,26 +30,47 @@ export function Item({ it, onGrade, onNext, onSkip }) {
       setExpl({ text: t.replace(/[*#]/g, '') });
     } catch (e) { setExpl({ err: e.message }); }
   };
-  const skipLink = onSkip ? (
-    <Pressable onPress={onSkip} style={{ marginTop: 14, alignSelf: 'flex-start' }}>
-      <Text style={{ color: C.muted, fontSize: 13 }}>🚫 Pas à apprendre (le prof l'a dit)</Text>
-    </Pressable>
-  ) : null;
+  // En-tête : type de question + menu « ⋯ » discret
+  const head = (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+        <Text style={{ flex: 1, color: C.muted, fontWeight: '700', fontSize: 13 }}>{TYPE[it.t]}</Text>
+        {onSkip ? <Pressable onPress={() => setMenu(!menu)} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: menu ? C.priSoft : 'transparent' }}>
+          <Text style={{ color: C.muted, fontSize: 20, fontWeight: '800', lineHeight: 22 }}>⋯</Text>
+        </Pressable> : null}
+      </View>
+      {menu && (
+        <FadeIn from={-6}>
+          <Pressable onPress={() => { setMenu(false); onSkip(); }} style={{ backgroundColor: C.priSoft, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+            <Text style={{ color: C.priInk, fontWeight: '700' }}>🚫 Le prof a dit de ne pas l'apprendre</Text>
+            <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Elle ne te sera plus posée (tu peux la rétablir dans Bilan).</Text>
+          </Pressable>
+        </FadeIn>
+      )}
+    </View>
+  );
 
   if (it.t === 'v') {
+    const turn = () => { Animated.spring(rot, { toValue: flip ? 0 : 1, useNativeDriver: true, speed: 12, bounciness: 6 }).start(); setFlip(!flip); };
+    const face = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 20, backfaceVisibility: 'hidden' };
+    const front = rot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+    const back = rot.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
     return (
       <View>
-        <Txt muted>Fiche : retourne la carte, puis dis si tu savais.</Txt>
-        <Pressable onPress={() => setFlip((f) => !f)}
-          style={{ minHeight: 200, marginVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: flip ? C.bg : C.pri, alignItems: 'center', justifyContent: 'center', padding: 18 }}>
-          <Rich style={{ color: flip ? C.ink : '#fff', fontSize: flip ? 16 : 21, fontWeight: flip ? '400' : '700', textAlign: 'center' }}>{flip ? x.def : x.terme}</Rich>
-          {!flip && <Text style={{ color: '#fff', opacity: 0.8, marginTop: 12, fontSize: 12 }}>Touche pour retourner</Text>}
+        {head}
+        <Pressable onPress={turn} style={{ height: 230, marginVertical: 8 }}>
+          <Animated.View style={[face, { backgroundColor: C.pri, transform: [{ perspective: 1000 }, { rotateY: front }] }]}>
+            <Rich style={{ color: '#fff', fontSize: 23, fontWeight: '800', textAlign: 'center', lineHeight: 30 }}>{x.terme}</Rich>
+            <Text style={{ color: '#fff', opacity: 0.75, marginTop: 14, fontSize: 13, fontWeight: '600' }}>Touche pour retourner ↻</Text>
+          </Animated.View>
+          <Animated.View style={[face, { backgroundColor: C.priSoft, transform: [{ perspective: 1000 }, { rotateY: back }] }]}>
+            <Rich style={{ fontSize: 17, textAlign: 'center', lineHeight: 25 }}>{x.def}</Rich>
+          </Animated.View>
         </Pressable>
-        <Row>
+        <Row style={{ flexWrap: 'nowrap', marginTop: 6 }}>
           <Btn flex kind="sec" label="🔁 À revoir" onPress={() => { onGrade(false); onNext(); }} />
           <Btn flex label="✅ Je savais" onPress={() => { onGrade(true); onNext(); }} />
         </Row>
-        {skipLink}
       </View>
     );
   }
@@ -55,22 +79,24 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   const pick = (v) => { if (answered) return; setAns(v); onGrade(it.t === 'q' ? v === x.bonne : v === x.vrai); };
   return (
     <View>
-      {it.t === 'f' && <Txt muted>Vrai ou faux ?</Txt>}
-      <Rich style={{ fontWeight: '700', marginVertical: 8 }}>{phrase}</Rich>
+      {head}
+      <Rich style={{ fontWeight: '800', fontSize: 19, lineHeight: 26, marginBottom: 10 }}>{phrase}</Rich>
       {it.t === 'q'
-        ? order.map((i) => <Opt key={i} label={x.choix[i]} onPress={() => pick(i)} state={!answered ? null : i === x.bonne ? 'good' : i === ans ? 'wrong' : null} />)
-        : <Row style={{ flexWrap: 'nowrap' }}>{[true, false].map((v) => <Opt key={String(v)} center label={v ? 'Vrai' : 'Faux'} onPress={() => pick(v)} state={!answered ? null : v === x.vrai ? 'good' : v === ans ? 'wrong' : null} />)}</Row>}
+        ? order.map((i, k) => <Opt key={i} letter={'ABCD'[k] || '•'} label={x.choix[i]} onPress={() => pick(i)} state={!answered ? null : i === x.bonne ? 'good' : i === ans ? 'wrong' : null} />)
+        : <Row style={{ flexWrap: 'nowrap' }}>{[true, false].map((v) => <Opt key={String(v)} center label={v ? '👍 Vrai' : '👎 Faux'} onPress={() => pick(v)} state={!answered ? null : v === x.vrai ? 'good' : v === ans ? 'wrong' : null} />)}</Row>}
       {answered && (
         <View>
-          <Fb ok={ok}><Rich style={{ fontSize: 15 }}>{(it.t === 'q' ? (ok ? '<b>Bonne réponse !</b> ' : '<b>Pas tout à fait.</b> ') : (x.vrai ? '<b>Vrai.</b> ' : '<b>Faux.</b> ')) + x.expl}</Rich></Fb>
-          {!ok && !expl && <Btn kind="sec" small label="🤖 Explique-moi autrement" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={explain} />}
-          {expl && <View style={{ backgroundColor: C.priSoft, borderRadius: 10, padding: 12, marginTop: 8 }}>
-            <Txt>{expl.loading ? "L'IA réfléchit…" : expl.err ? expl.err : expl.text}</Txt>
-          </View>}
-          <Btn label="Suivant ➜" onPress={onNext} style={{ marginTop: 10, alignSelf: 'flex-start' }} />
+          <Fb ok={ok}>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: ok ? C.ok : C.bad, marginBottom: 4 }}>{ok ? pickPhrase('🎉 Bien joué !', ['💪 Exactement !', '🔥 Parfait !', '✨ Bonne réponse !']) : it.t === 'f' ? (x.vrai ? '💡 C\'était vrai' : '💡 C\'était faux') : '💡 Pas tout à fait'}</Text>
+            {x.expl ? <Rich style={{ fontSize: 15 }}>{x.expl}</Rich> : null}
+          </Fb>
+          {!ok && !expl && <Btn kind="sec" small label="🤖 Explique-moi autrement" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={explain} />}
+          {expl && <FadeIn><View style={{ backgroundColor: C.priSoft, borderRadius: 16, padding: 14, marginTop: 10 }}>
+            <Txt>{expl.loading ? "🤖 L'IA réfléchit…" : expl.err ? expl.err : expl.text}</Txt>
+          </View></FadeIn>}
+          <Btn label="Suivant ➜" onPress={onNext} style={{ marginTop: 12 }} />
         </View>
       )}
-      {skipLink}
     </View>
   );
 }
@@ -78,45 +104,68 @@ export function Item({ it, onGrade, onNext, onSkip }) {
 export function skipItem(ch, id) { ch.skip = ch.skip || {}; ch.skip[id] = true; commit(); }
 
 /* ---------- Cours ---------- */
+// Appui long sur une partie ou un mot : « le prof a dit de ne pas l'apprendre »
+function askSkip(ch, id, name) {
+  ch.skip = ch.skip || {};
+  if (ch.skip[id]) {
+    Alert.alert('Rétablir ?', `« ${name} » sera de nouveau à apprendre.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Rétablir', onPress: () => { delete ch.skip[id]; commit(); } }]);
+  } else {
+    Alert.alert('Pas à apprendre ?', `« ${name} » ne te sera plus demandé.`, [{ text: 'Annuler', style: 'cancel' }, { text: '🚫 Pas à apprendre', style: 'destructive', onPress: () => { ch.skip[id] = true; commit(); } }]);
+  }
+}
 export function TCours({ ch }) {
   const { C } = useApp(); const p = ch.pack;
-  ch.skip = ch.skip || {};
-  const toggle = (id) => { ch.skip[id] = !ch.skip[id]; commit(); };
-  const Mute = ({ id }) => (
-    <Pressable onPress={() => toggle(id)} hitSlop={8}><Text style={{ fontSize: 13, color: C.muted }}>{ch.skip[id] ? '↩️ Rétablir' : '🚫'}</Text></Pressable>
-  );
+  const sk = ch.skip || {};
+  const plain = (t) => String(t).replace(/<[^>]+>/g, '');
+  const hidden = p.resume.map((r, i) => ({ r, i })).filter((o) => sk['r' + o.i]);
   return (
     <View>
-      {ch.consigne ? <Note><Txt>{'🚫 À ne pas apprendre : ' + ch.consigne}</Txt></Note> : null}
+      {ch.consigne ? <Note><Txt bold>🚫 À ne pas apprendre</Txt><Txt>{ch.consigne}</Txt></Note> : null}
       {p.alertes.map((a, i) => <Note key={i}><Rich style={{ fontSize: 15 }}>{'⚠️ ' + a}</Rich></Note>)}
-      {p.resume.map((r, i) => (
-        <Card key={i} style={ch.skip['r' + i] ? { opacity: 0.45 } : null}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            <View style={{ flex: 1 }}><H2><Rich style={{ fontSize: 18, fontWeight: '700', textDecorationLine: ch.skip['r' + i] ? 'line-through' : 'none' }}>{r.titre}</Rich></H2></View>
-            <Mute id={'r' + i} />
-          </View>
-          {ch.skip['r' + i] ? <Txt muted>Partie à ne pas apprendre.</Txt> : <Rich>{r.texte}</Rich>}
-        </Card>
+      {p.resume.map((r, i) => sk['r' + i] ? null : (
+        <FadeIn key={i} delay={Math.min(i, 6) * 50}>
+          <Pressable onLongPress={() => askSkip(ch, 'r' + i, plain(r.titre))} delayLongPress={450}>
+            <Card>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.priSoft, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: C.priInk, fontWeight: '800' }}>{i + 1}</Text>
+                </View>
+                <View style={{ flex: 1 }}><Rich style={{ fontSize: 18, fontWeight: '800', lineHeight: 24 }}>{r.titre}</Rich></View>
+              </View>
+              <Rich style={{ lineHeight: 25 }}>{r.texte}</Rich>
+            </Card>
+          </Pressable>
+        </FadeIn>
       ))}
       {p.formules.length > 0 && (
         <Card><H2>🧮 Formules</H2>
           {p.formules.map((f, i) => (
-            <View key={i} style={{ marginBottom: 8 }}>
+            <View key={i} style={{ marginBottom: 10 }}>
               <Txt bold>{f.nom}</Txt>
-              <View style={{ backgroundColor: C.priSoft, padding: 10, borderRadius: 10, marginVertical: 6 }}><Rich style={{ textAlign: 'center', fontSize: 17 }}>{f.formule}</Rich></View>
+              <View style={{ backgroundColor: C.priSoft, padding: 14, borderRadius: 16, marginVertical: 6 }}><Rich style={{ textAlign: 'center', fontSize: 18, fontWeight: '700' }}>{f.formule}</Rich></View>
               {f.note ? <Rich style={{ color: C.muted, fontSize: 14 }}>{f.note}</Rich> : null}
             </View>
           ))}
         </Card>
       )}
       {p.vocab.length > 0 && <Card><H2>📖 Vocabulaire</H2>{p.vocab.map((v, i) => (
-        <View key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginVertical: 4, opacity: ch.skip['v' + i] ? 0.45 : 1 }}>
-          <View style={{ flex: 1 }}><Rich>{`<b>${v.terme}</b> : ${v.def}`}</Rich></View>
-          <Mute id={'v' + i} />
-        </View>
+        <Pressable key={i} onLongPress={() => askSkip(ch, 'v' + i, plain(v.terme))} delayLongPress={450}
+          style={{ paddingVertical: 9, borderTopWidth: i ? 1 : 0, borderColor: C.line, opacity: sk['v' + i] ? 0.35 : 1 }}>
+          <Rich style={{ textDecorationLine: sk['v' + i] ? 'line-through' : 'none' }}>{`<b>${v.terme}</b> : ${v.def}`}</Rich>
+        </Pressable>
       ))}</Card>}
-      {!p.resume.length && !p.vocab.length && <Card><Txt muted>Pas encore de résumé pour ce chapitre.</Txt></Card>}
-      <Txt muted>Touche 🚫 à côté d'une partie ou d'un mot que le prof a dit de ne pas apprendre : il ne sera plus demandé.</Txt>
+      {hidden.length > 0 && (
+        <Card style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: C.line, shadowOpacity: 0, elevation: 0 }}>
+          <Txt muted bold>🚫 Parties pas à apprendre</Txt>
+          {hidden.map((o) => (
+            <Pressable key={o.i} onPress={() => askSkip(ch, 'r' + o.i, plain(o.r.titre))} style={{ paddingVertical: 6 }}>
+              <Txt muted>{plain(o.r.titre)} · <Text style={{ color: C.pri, fontWeight: '700' }}>rétablir</Text></Txt>
+            </Pressable>
+          ))}
+        </Card>
+      )}
+      {!p.resume.length && !p.vocab.length && <Card><Txt muted>Pas encore de cours. Ajoute tes notes avec 📷 en haut.</Txt></Card>}
+      <Txt muted center style={{ marginTop: 4, fontSize: 12 }}>Astuce : appuie longtemps sur une partie ou un mot que le prof a dit de ne pas apprendre.</Txt>
     </View>
   );
 }

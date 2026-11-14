@@ -1,20 +1,129 @@
+// Mes révisions : structure de l'appli (en-tête, onglets du bas, fenêtres).
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, ScrollView, Pressable, Modal, BackHandler, AppState, ActivityIndicator, Platform, StatusBar as RNStatusBar, useColorScheme, KeyboardAvoidingView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { Ctx, LIGHT, DARK, Btn, Chip } from './src/ui';
+import { S, load, commit, persistNow, setRefresher } from './src/store';
+import { reschedule } from './src/notifs';
+import { checkClipboard } from './src/share';
+import { silentRefresh, Edt, Notes } from './src/school';
+import { Home, Session, sessionTitle, Chapter, Settings } from './src/screens';
+import { Train, Tool, TOOL_TITLES } from './src/tools';
+
+const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]];
+const TOP = NAV.map((n) => n[0]);
 
 export default function App() {
+  const C = useColorScheme() === 'dark' ? DARK : LIGHT;
+  const [ready, setReady] = useState(false);
+  const [, setTick] = useState(0);
+  const [view, setView] = useState({ name: 'home' });
+  const [modal, setModal] = useState(null);
+  const [busy, setBusy] = useState(null);
+
+  const go = (v) => setView(v);
+  useEffect(() => {
+    setRefresher(() => setTick((t) => t + 1));
+    (async () => {
+      await load();
+      setReady(true);
+      reschedule(S);
+      silentRefresh();
+      setTimeout(() => checkClipboard(go), 800);
+    })();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') checkClipboard(go);
+      else { persistNow(); reschedule(S); }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const back = () => setView({ name: view.back || 'home' });
+  useEffect(() => {
+    const h = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (busy) return true;
+      if (modal) { setModal(null); return true; }
+      if (view.name !== 'home') { back(); return true; }
+      return false;
+    });
+    return () => h.remove();
+  }, [view, modal, busy]);
+
+  const runAI = async (title, fn, sub) => {
+    setBusy({ title, sub });
+    try { return await fn(); } finally { setBusy(null); }
+  };
+  const ctx = { C, S, commit, go, back, matOf: (ch) => S.profil.matieres.find((m) => m.id === ch.matiereId) || { nom: '?', couleur: '#888' }, setModal, runAI, view };
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.pri} size="large" /></View>;
+
+  let v = view;
+  if (v.name === 'ch' && !S.chs[v.id]) v = { name: 'home' };
+  let title = null, screen = null;
+  if (v.name === 'home') screen = <Home />;
+  if (v.name === 'edt') { title = '📅 Emploi du temps'; screen = <Edt />; }
+  if (v.name === 'notes') { title = '📊 Mes notes'; screen = <Notes />; }
+  if (v.name === 'train') { title = "🧠 S'entraîner"; screen = <Train />; }
+  if (v.name === 'session') { title = sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} />; }
+  if (v.name === 'tool') { title = TOOL_TITLES[v.tool] || 'Outil'; screen = <Tool tool={v.tool} mats={v.mats} />; }
+  if (v.name === 'ch') { title = S.chs[v.id].titre; screen = <Chapter id={v.id} tab={v.tab} setTab={(t) => setView({ ...v, tab: t })} />; }
+  if (v.name === 'settings') { title = '⚙️ Réglages'; screen = <Settings />; }
+  const isTop = TOP.includes(v.name);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <Ctx.Provider value={ctx}>
+      <StatusBar style={C === DARK ? 'light' : 'dark'} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 50 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: C.line }}>
+          {!isTop && <Btn kind="ghost" small label="←" onPress={back} />}
+          {title === null ? (
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Image source={require('./assets/logo-mark.png')} style={{ width: 28, height: 32 }} resizeMode="contain" />
+              <Text style={{ fontSize: 24, fontWeight: '800', letterSpacing: -1, color: C.ink }}>révisio</Text>
+            </View>
+          ) : <Text numberOfLines={1} style={{ flex: 1, fontSize: 19, fontWeight: '700', color: C.ink }}>{title}</Text>}
+          {isTop && <><Chip>🔥 {S.profil.streak || 0}</Chip><Btn kind="ghost" small label="⚙️" onPress={() => go({ name: 'settings', back: v.name })} /></>}
+        </View>
+        <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ padding: 12, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          {screen}
+        </ScrollView>
+        {isTop && (
+          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: C.line, backgroundColor: C.card, paddingBottom: Platform.OS === 'android' ? 24 : 28 }}>
+            {NAV.map(([k, icon, label]) => (
+              <Pressable key={k} onPress={() => go({ name: k })} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
+                <Text style={{ fontSize: 20, opacity: v.name === k ? 1 : 0.5 }}>{icon}</Text>
+                <Text style={{ fontSize: 11, color: v.name === k ? C.pri : C.muted, fontWeight: v.name === k ? '700' : '400' }}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </KeyboardAvoidingView>
+      <Modal visible={!!modal} transparent animationType="slide" onRequestClose={() => setModal(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: C.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '92%' }}>
+            <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+              {modal || null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={!!busy} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          {busy && <Busy title={busy.title} sub={busy.sub} C={C} />}
+        </View>
+      </Modal>
+    </Ctx.Provider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function Busy({ title, sub, C }) {
+  const [s, setS] = useState(0);
+  useEffect(() => { const t0 = Date.now(); const iv = setInterval(() => setS(Math.round((Date.now() - t0) / 1000)), 1000); return () => clearInterval(iv); }, []);
+  return (
+    <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 400 }}>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: C.ink, marginBottom: 14 }}>{title}</Text>
+      <ActivityIndicator size="large" color={C.pri} />
+      <Text style={{ color: C.muted, marginTop: 14, textAlign: 'center' }}>{sub || "L'IA lit tes cours… Ça peut prendre 1 à 2 minutes. Garde l'appli ouverte."} {s} s</Text>
+    </View>
+  );
+}

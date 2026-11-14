@@ -1,24 +1,68 @@
 {
   "expo": {
-    "name": "revisions",
+    "name": "Révisio",
     "slug": "revisions",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
+    "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
     "android": {
+      "package": "com.mesrevisions.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4F46E5"
       }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-status-bar",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "L'appli a besoin de l'appareil photo pour prendre tes cours en photo et scanner le QR code Pronote."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'appli a besoin de tes photos pour lire tes cours.",
+          "cameraPermission": "L'appli a besoin de l'appareil photo pour prendre tes cours en photo."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140,
+          "backgroundColor": "#F7F7F4",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#10151d"
+          }
+        }
+      ],
+      "expo-sharing"
+    ],
+    "icon": "./assets/icon.png",
+    "extra": {
+      "eas": {
+        "projectId": "79cb6953-c546-46bf-8139-9d3d43f38db7"
+      }
+    },
+    "owner": "oranginours",
+    "updates": {
+      "url": "https://u.expo.dev/79cb6953-c546-46bf-8139-9d3d43f38db7"
+    },
+    "ios": {}
   }
 }

@@ -1,0 +1,19 @@
+# Lancé à la main (onglet Actions → « Fabriquer l'APK » → Run workflow) : fabrique un nouvel APK sur les serveurs d'Expo.
+name: Fabriquer l'APK
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: eas build --platform android --profile preview --non-interactive --wait

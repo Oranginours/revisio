@@ -93,6 +93,7 @@ async function fetchGrades(periodName) {
 export async function silentRefresh() {
   if (!S.pronote) return;
   try { const m = mondayOf(new Date()); await fetchWeek(m); const n = new Date(m); n.setDate(n.getDate() + 7); await fetchWeek(n); } catch (e) {}
+  reschedule(S); // les réveils suivent l'emploi du temps à jour
 }
 
 /* ================= Matières Pronote ↔ matières de l'appli ================= */

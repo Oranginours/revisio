@@ -2,6 +2,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { today, addDays, diffDays, isArchived } from './logic';
+import { wakeCfg, wakePlan } from './alarm';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,9 +30,10 @@ export async function reschedule(S) {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of all) { if (n.content && n.content.data && n.content.data.daily) await Notifications.cancelScheduledNotificationAsync(n.identifier); }
     const set = S.settings || {};
-    if (!set.notifOn) return;
     const perm = await Notifications.getPermissionsAsync();
     if (perm.status !== 'granted') return;
+    await scheduleWake(S);
+    if (!set.notifOn) return;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(CHANNEL, { name: 'Rappels de révision', importance: Notifications.AndroidImportance.HIGH });
     }
@@ -85,4 +87,34 @@ export async function scheduleTimer(seconds, title, body) {
 }
 export async function cancelTimer(id) {
   try { if (id) await Notifications.cancelScheduledNotificationAsync(id); } catch (e) {}
+}
+
+// Réveil et départ calés sur le premier cours (7 prochains jours)
+const WAKE = 'reveil';
+async function scheduleWake(S) {
+  const c = wakeCfg();
+  if (!c.on || !S.pronote || (!c.notif && !c.depart)) return;
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(WAKE, {
+      name: 'Réveil', importance: Notifications.AndroidImportance.MAX, sound: 'default', vibrationPattern: [0, 600, 400, 600, 400, 600], enableVibrate: true,
+    });
+  }
+  const now = Date.now();
+  for (let d = 0; d < 7; d++) {
+    const p = wakePlan(addDays(today(), d));
+    if (!p) continue;
+    const where = p.lesson.room ? ` en ${p.lesson.room}` : '';
+    if (c.notif && p.wake.getTime() > now + 60000) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: `⏰ Debout ! Il est ${p.label.wake}`, body: `${p.lesson.subject} à ${p.label.start}${where}. Départ à ${p.label.depart}.`, data: { daily: true, wake: true }, sound: 'default', priority: 'max' },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.wake, channelId: WAKE },
+      });
+    }
+    if (c.depart && p.depart.getTime() > now + 60000) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: "🚌 C'est l'heure de partir !", body: `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.depart, channelId: WAKE },
+      });
+    }
+  }
 }

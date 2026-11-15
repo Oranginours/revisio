@@ -13,6 +13,7 @@ import { ImportForm, ShareChoice, exportBackup, importBackup } from './share';
 import { DsDetected, QrLogin, logoutPronote, firstName, NextLesson } from './school';
 import { tipOfDay } from './tools';
 import { levelInfo, levelTitle, sessionDone } from './progress';
+import { WakeCard, WakeSettings } from './alarm';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -96,6 +97,7 @@ export function Home() {
       </FadeIn>
 
       <GettingStarted />
+      <WakeCard />
       <NextLesson />
       <LevelRow />
 
@@ -538,6 +540,9 @@ export function Settings() {
         <Txt muted style={{ marginTop: 6, fontSize: 12 }}>Change-le seulement si l'IA dit « modèle introuvable ».</Txt>
         <Btn label="Enregistrer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={saveAI} />
       </Card>
+
+      <Section>RÉVEIL</Section>
+      <WakeSettings onChange={async (k, v) => { if (k === 'on' && v) await askPermission(); reschedule(S); }} />
 
       <Section>RAPPELS</Section>
       <Card>

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast } from './ui';
+import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast, ask } from './ui';
 import { uid, parseFr, parseTime, isArchived, toFr, COLORS, normPack, mergePack, promptNotes, promptSkip, items } from './logic';
 import { gemini, prepareImage } from './ai';
 import { reschedule } from './notifs';
@@ -46,7 +46,7 @@ export function MatiereForm({ id, onCreated }) {
       <Row style={{ marginTop: 14 }}><Btn label={m ? 'Enregistrer' : 'Ajouter'} onPress={save} /><Btn kind="ghost" label="Annuler" onPress={() => setModal(null)} /></Row>
       {m && list.length > 0 && <Btn kind="sec" style={{ marginTop: 20 }} label={`📤 Partager toute la matière (${list.length} chapitre${list.length > 1 ? 's' : ''})`} onPress={() => shareFile(list, m.nom)} />}
       {m && <Btn kind="danger" style={{ marginTop: 12 }} label={`Supprimer la matière${list.length ? ` et ses ${list.length} chapitre${list.length > 1 ? 's' : ''}` : ''}`}
-        onPress={() => Alert.alert('Supprimer ?', 'Cette action est définitive.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => {
+        onPress={() => ask('Supprimer ?', 'Cette action est définitive.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => {
           list.forEach((c) => delete S.chs[c.id]);
           S.profil.matieres = S.profil.matieres.filter((x) => x.id !== id);
           // ne pas la recréer depuis l'emploi du temps
@@ -63,7 +63,7 @@ export function PhotoPicker({ uris, setUris }) {
   const { C } = useApp();
   const camera = async () => {
     const p = await ImagePicker.requestCameraPermissionsAsync();
-    if (!p.granted) return Alert.alert('Appareil photo', "Autorise l'appareil photo dans les réglages du téléphone.");
+    if (!p.granted) return ask('Appareil photo', "Autorise l'appareil photo dans les réglages du téléphone.");
     const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
     if (!r.canceled) setUris([...uris, ...r.assets.map((a) => a.uri)].slice(0, 12));
   };
@@ -227,7 +227,7 @@ export function ChSettings({ id }) {
           ? <Btn kind="sec" label="📤 Désarchiver le chapitre" onPress={() => { ch.archived = false; commit(); reschedule(S); setModal(null); }} />
           : <Btn kind="sec" label="🗄️ Archiver le chapitre" onPress={() => { ch.archived = true; commit(); reschedule(S); setModal(null); }} />}
         <Btn kind="ghost" label="Remettre ma progression à zéro" onPress={() => { ch.srs = {}; ch.auto = {}; commit(); setModal(null); }} />
-        <Btn kind="danger" label="Supprimer le chapitre" onPress={() => Alert.alert('Supprimer ce chapitre ?', 'Les fiches, les questions et ta progression seront effacées.', [
+        <Btn kind="danger" label="Supprimer le chapitre" onPress={() => ask('Supprimer ce chapitre ?', 'Les fiches, les questions et ta progression seront effacées.', [
           { text: 'Annuler', style: 'cancel' },
           { text: 'Supprimer', style: 'destructive', onPress: () => { delete S.chs[id]; commit(); reschedule(S); setModal(null); go({ name: 'home' }); } },
         ])} />

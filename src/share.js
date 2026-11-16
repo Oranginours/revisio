@@ -4,12 +4,36 @@ import { View, Alert, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
-import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast } from './ui';
+import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast, ask, isWeb } from './ui';
 import { uid, COLORS, normPack } from './logic';
 import { reschedule } from './notifs';
 import { S, commit, matOf } from './store';
 import { flag } from './progress';
+
+/* ---------- fichiers : téléphone (partage) ou navigateur (téléchargement) ---------- */
+async function saveFile(name, text, title) {
+  if (isWeb) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return;
+  }
+  const { File, Paths } = require('expo-file-system');
+  const f = new File(Paths.cache, name);
+  try { if (f.exists) f.delete(); } catch (e) {}
+  f.create(); f.write(text);
+  if (!(await Sharing.isAvailableAsync())) throw new Error("le partage de fichiers n'est pas disponible sur ce téléphone");
+  await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: title });
+}
+async function pickText() {
+  const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+  if (r.canceled) return null;
+  const a = r.assets[0];
+  if (isWeb) return a.file ? await a.file.text() : await (await fetch(a.uri)).text();
+  const { File } = require('expo-file-system');
+  return await new File(a.uri).text();
+}
 
 const MAX_MSG = 60000; // au-delà, WhatsApp coupe le message : on passe par un fichier
 
@@ -31,13 +55,9 @@ export async function shareText(ch) {
 export async function shareFile(chs, name) {
   try {
     const safe = String(name || 'chapitres').normalize('NFD').replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 40);
-    const f = new File(Paths.cache, `revisions-${safe}.json`);
-    try { if (f.exists) f.delete(); } catch (e) {}
-    f.create();
-    f.write('REVISIONS:' + payload(chs));
     flag('share'); commit();
-    if (!(await Sharing.isAvailableAsync())) throw new Error("Le partage de fichiers n'est pas disponible sur ce téléphone.");
-    await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: 'Partager les chapitres' });
+    await saveFile(`revisions-${safe}.json`, 'REVISIONS:' + payload(chs), 'Partager les chapitres');
+    if (isWeb) toast('Fichier téléchargé : envoie-le à tes potes 📁');
   } catch (e) { toast('Partage impossible : ' + e.message, 'bad'); }
 }
 
@@ -70,7 +90,7 @@ export async function checkClipboard(go) {
     const t = await Clipboard.getStringAsync();
     if (!t || t.indexOf('REVISIONS:') < 0 || S.imported[sig(t)]) return;
     const m = t.match(/Chapitre « (.+?) »/);
-    Alert.alert('📥 Chapitre copié', `Tu as copié ${m ? '« ' + m[1] + ' »' : 'un chapitre'}. L'ajouter à tes révisions ?`, [
+    ask('📥 Chapitre copié', `Tu as copié ${m ? '« ' + m[1] + ' »' : 'un chapitre'}. L'ajouter à tes révisions ?`, [
       { text: 'Non', style: 'cancel', onPress: () => { S.imported[sig(t)] = 1; commit(); } },
       { text: 'Importer', onPress: () => { try { const ids = importText(t); go({ name: 'ch', id: ids[0], tab: 'cours' }); } catch (e) { toast('Le message copié est incomplet.', 'bad'); } } },
     ]);
@@ -86,10 +106,8 @@ export function ImportForm() {
   const paste = async () => { try { const t = await Clipboard.getStringAsync(); setTxt(t); fromText(t); } catch (e) { setErr('Impossible de lire le presse-papiers. Colle le message à la main.'); } };
   const pickFile = async () => {
     try {
-      const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-      if (r.canceled) return;
-      const t = await new File(r.assets[0].uri).text();
-      fromText(t);
+      const t = await pickText();
+      if (t !== null) fromText(t);
     } catch (e) { setErr("Impossible de lire ce fichier."); }
   };
   return (
@@ -130,21 +148,19 @@ export async function exportBackup() {
   try {
     const data = { v: 1, kind: 'revisio-sauvegarde', at: new Date().toISOString(), profil: S.profil, chs: S.chs,
       settings: { ...S.settings, apiKey: '' } }; // jamais la clé IA ni la connexion Pronote dans un fichier
-    const f = new File(Paths.cache, `revisio-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`);
-    try { if (f.exists) f.delete(); } catch (e) {}
-    f.create(); f.write(JSON.stringify(data));
-    await Sharing.shareAsync(f.uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer ma sauvegarde' });
+    await saveFile(`revisio-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data), 'Enregistrer ma sauvegarde');
+    if (isWeb) toast('Sauvegarde téléchargée 💾');
     S.settings.lastBackup = new Date().toISOString(); commit();
   } catch (e) { toast('Sauvegarde impossible : ' + e.message, 'bad'); }
 }
 export async function importBackup() {
   try {
-    const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-    if (r.canceled) return;
-    const d = JSON.parse(await new File(r.assets[0].uri).text());
+    const txt = await pickText();
+    if (txt === null) return;
+    const d = JSON.parse(txt);
     if (!d || d.kind !== 'revisio-sauvegarde' || !d.chs) throw new Error("ce n'est pas une sauvegarde Révisio");
     const n = Object.keys(d.chs).length;
-    Alert.alert('Restaurer la sauvegarde ?', `${n} chapitre${n > 1 ? 's' : ''} du ${String(d.at).slice(0, 10)}. Tes données actuelles seront remplacées.`, [
+    ask('Restaurer la sauvegarde ?', `${n} chapitre${n > 1 ? 's' : ''} du ${String(d.at).slice(0, 10)}. Tes données actuelles seront remplacées.`, [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Restaurer', style: 'destructive', onPress: () => {
         const key = S.settings.apiKey;

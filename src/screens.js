@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
-import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop, toast, ACCENTS, makeTheme } from './ui';
+import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop, toast, ACCENTS, makeTheme, ask, isWeb } from './ui';
 import { planFor, today, addDays, diffDays, fmtDate, longDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
 import { gemini, DEFAULT_MODEL } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
@@ -33,8 +33,8 @@ export function Home() {
         </FadeIn>
         <FadeIn delay={80}>
           <View style={{ gap: 10 }}>
-            {!S.pronote && <Btn label="🏫 Connecter Pronote (matières auto)" onPress={() => setModal(<QrLogin />)} />}
-            <Btn kind={S.pronote ? 'pri' : 'sec'} label="＋ Ajouter une matière à la main" onPress={() => setModal(<MatiereForm />)} />
+            {!S.pronote && !isWeb && <Btn label="🏫 Connecter Pronote (matières auto)" onPress={() => setModal(<QrLogin />)} />}
+            <Btn kind={S.pronote || isWeb ? 'pri' : 'sec'} label="＋ Ajouter une matière à la main" onPress={() => setModal(<MatiereForm />)} />
             <Btn kind="sec" label="📥 Importer les chapitres d'un pote" onPress={() => setModal(<ImportForm />)} />
             <Btn kind="ghost" label="Essayer avec 2 chapitres d'exemple" onPress={loadExamples} />
           </View>
@@ -96,6 +96,7 @@ export function Home() {
         </View>
       </FadeIn>
 
+      <WebInstall />
       <GettingStarted />
       <WakeCard />
       <NextLesson />
@@ -209,13 +210,31 @@ function PlanCard({ ch }) {
   );
 }
 
+// Dans le navigateur : proposer d'ajouter Révisio à l'écran d'accueil
+function WebInstall() {
+  const { C } = useApp();
+  if (!isWeb || S.profil.webTipDone) return null;
+  let standalone = false;
+  try { standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches; } catch (e) {}
+  if (standalone) return null;
+  const ios = /iPhone|iPad|iPod/.test((typeof navigator !== 'undefined' && navigator.userAgent) || '');
+  return (
+    <Card style={{ backgroundColor: C.priSoft }}>
+      <Text style={{ color: C.priInk, fontWeight: '900', fontSize: 16 }}>📱 Mets Révisio sur ton écran d'accueil</Text>
+      <Text style={{ color: C.ink, marginTop: 6, lineHeight: 21 }}>{ios ? "Dans Safari, touche le bouton Partager (carré avec une flèche ↑), puis « Sur l'écran d'accueil »." : "Dans le menu du navigateur (⋮), choisis « Ajouter à l'écran d'accueil » ou « Installer l'application »."} Elle s'ouvrira comme une vraie appli.</Text>
+      <Text style={{ color: C.muted, marginTop: 6, fontSize: 12 }}>Tes données restent dans ce navigateur : fais une 💾 sauvegarde de temps en temps (Réglages).</Text>
+      <Pressable onPress={() => { S.profil.webTipDone = true; commit(); }} style={{ marginTop: 8 }}><Text style={{ color: C.pri, fontWeight: '800' }}>C'est fait / masquer</Text></Pressable>
+    </Card>
+  );
+}
+
 // Premiers pas : une petite liste à cocher tant que tout n'est pas prêt
 function GettingStarted() {
   const { C, go, setModal } = useApp();
   if (S.profil.onboarded) return null;
   const steps = [
     ['👋', 'Dis-moi ton prénom', !!(S.profil.prenom || (S.pronote && S.pronote.name)), () => go({ name: 'settings', back: 'home' })],
-    ['🏫', 'Connecte Pronote (matières auto)', !!S.pronote, () => setModal(<QrLogin />)],
+    ...(isWeb ? [] : [['🏫', 'Connecte Pronote (matières auto)', !!S.pronote, () => setModal(<QrLogin />)]]),
     ['🤖', 'Ajoute ta clé IA gratuite', !!S.settings.apiKey, () => go({ name: 'settings', back: 'home' })],
     ['📷', 'Crée ton premier chapitre', Object.keys(S.chs).length > 0, () => setModal(<ChapitreForm />)],
     ['🎯', 'Fais ta première session', ((S.profil.stats || {}).sessions || 0) > 0, () => setModal(<SessionSetup />)],
@@ -509,6 +528,9 @@ export function Settings() {
         </View>
       </Card>
 
+      {isWeb ? (
+        <Card><Txt muted>🌐 Version navigateur : Pronote, le réveil et les rappels ne sont disponibles que dans l'appli Android.</Txt></Card>
+      ) : <>
       <Section>ÉCOLE</Section>
       <Card>
         <H2>🏫 Pronote</H2>
@@ -516,7 +538,7 @@ export function Settings() {
           <View>
             <Txt>Connecté : {S.pronote.name}{S.pronote.className ? ' · ' + S.pronote.className : ''}</Txt>
             {S.pronote.school ? <Txt muted>{S.pronote.school}</Txt> : null}
-            <Btn kind="ghost" small label="Se déconnecter" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => Alert.alert('Se déconnecter de Pronote ?', '', [{ text: 'Annuler', style: 'cancel' }, { text: 'Oui', onPress: logoutPronote }])} />
+            <Btn kind="ghost" small label="Se déconnecter" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => ask('Se déconnecter de Pronote ?', '', [{ text: 'Annuler', style: 'cancel' }, { text: 'Oui', onPress: logoutPronote }])} />
           </View>
         ) : (
           <View>
@@ -525,6 +547,7 @@ export function Settings() {
           </View>
         )}
       </Card>
+      </>}
 
       <Section>INTELLIGENCE ARTIFICIELLE</Section>
       <Card>
@@ -541,6 +564,7 @@ export function Settings() {
         <Btn label="Enregistrer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={saveAI} />
       </Card>
 
+      {!isWeb && <>
       <Section>RÉVEIL</Section>
       <WakeSettings onChange={async (k, v) => { if (k === 'on' && v) await askPermission(); reschedule(S); }} />
 
@@ -559,6 +583,7 @@ export function Settings() {
         <Txt muted style={{ marginTop: 8 }}>Le rappel saute les jours où ta session est faite, et te prévient quand un DS approche.</Txt>
         <Btn kind="sec" small label="Tester (notification dans 5 s)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={async () => { if (await askPermission()) { await testNotification(); toast('Notification dans 5 secondes…', 'info'); } }} />
       </Card>
+      </>}
 
       <Section>SAUVEGARDE</Section>
       <Card>

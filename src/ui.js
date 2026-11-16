@@ -1,6 +1,6 @@
 // Couleurs, animations et petits composants réutilisés partout.
 import React, { createContext, useContext, useEffect, useRef } from 'react';
-import { View, Text, Pressable, TextInput, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, Pressable, TextInput, StyleSheet, Animated, Easing, Alert, Platform } from 'react-native';
 
 // Palette du logo Révisio (indigo + lavande). La couleur principale peut être changée dans les réglages.
 export const LIGHT = { bg: '#F4F4F8', card: '#FFFFFF', ink: '#14151F', muted: '#6B7080', line: '#E6E7EE', pri: '#4F46E5', priSoft: '#EEF0FF', priInk: '#3730A3', soft: '#C7D2FE', ok: '#16A34A', okSoft: '#E7F7EC', bad: '#E5484D', badSoft: '#FDECEC', warn: '#B7791F', warnSoft: '#FFF6E0', shadow: 0.06, dark: false };
@@ -28,6 +28,16 @@ export const setToastFn = (f) => { toastFn = f; };
 export const toast = (msg, kind = 'ok') => { if (toastFn) toastFn(String(msg), kind); };
 // L'écran affiché enregistre ici sa fonction d'actualisation (emploi du temps, notes)
 export const pull = { fn: null };
+
+export const isWeb = Platform.OS === 'web';
+// Boîte de confirmation qui marche aussi dans le navigateur (Alert ne fait rien sur le web)
+export function ask(title, msg, buttons) {
+  if (!isWeb) return Alert.alert(title, msg, buttons);
+  const act = (buttons || []).filter((b) => b.style !== 'cancel');
+  if (!act.length) { window.alert(title + (msg ? '\n\n' + msg : '')); return; }
+  if (window.confirm(title + (msg ? '\n\n' + msg : ''))) act[act.length - 1].onPress && act[act.length - 1].onPress();
+  else { const c = (buttons || []).find((b) => b.style === 'cancel'); if (c && c.onPress) c.onPress(); }
+}
 
 export const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);

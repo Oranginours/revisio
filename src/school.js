@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as pronote from '@blockshub/pawnote-lts';
+import * as pronote from './pawnote';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, Label, Input, Err, Fb, toast, pull } from './ui';
 import { uid, dstr, today, fmtDate, mondayOf, norm, diffDays, isArchived } from './logic';
 import { S, commit, persistNow, chaptersOf } from './store';

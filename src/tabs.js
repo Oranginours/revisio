@@ -1,7 +1,7 @@
 // Les outils d'un chapitre : fiches, quiz, vrai/faux, ordre, exercices, rédaction, bilan.
 import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, Pressable, Animated, Alert, PanResponder } from 'react-native';
-import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err, FadeIn } from './ui';
+import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err, FadeIn, ask } from './ui';
 import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase } from './logic';
 import { S, commit, matOf } from './store';
 import { gemini } from './ai';
@@ -133,9 +133,9 @@ export function skipItem(ch, id) { ch.skip = ch.skip || {}; ch.skip[id] = true; 
 function askSkip(ch, id, name) {
   ch.skip = ch.skip || {};
   if (ch.skip[id]) {
-    Alert.alert('Rétablir ?', `« ${name} » sera de nouveau à apprendre.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Rétablir', onPress: () => { delete ch.skip[id]; commit(); } }]);
+    ask('Rétablir ?', `« ${name} » sera de nouveau à apprendre.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Rétablir', onPress: () => { delete ch.skip[id]; commit(); } }]);
   } else {
-    Alert.alert('Pas à apprendre ?', `« ${name} » ne te sera plus demandé.`, [{ text: 'Annuler', style: 'cancel' }, { text: '🚫 Pas à apprendre', style: 'destructive', onPress: () => { ch.skip[id] = true; commit(); } }]);
+    ask('Pas à apprendre ?', `« ${name} » ne te sera plus demandé.`, [{ text: 'Annuler', style: 'cancel' }, { text: '🚫 Pas à apprendre', style: 'destructive', onPress: () => { ch.skip[id] = true; commit(); } }]);
   }
 }
 export function TCours({ ch }) {

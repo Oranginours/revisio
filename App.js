@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ScrollView, Pressable, Modal, BackHandler, AppState, ActivityIndicator, Platform, StatusBar as RNStatusBar, useColorScheme, KeyboardAvoidingView, RefreshControl } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Ctx, makeTheme, Btn, Chip, ToastHost, pull } from './src/ui';
+import { Ctx, makeTheme, Btn, Chip, ToastHost, pull, isWeb } from './src/ui';
 import { S, load, commit, persistNow, setRefresher } from './src/store';
 import { reschedule } from './src/notifs';
 import { checkClipboard } from './src/share';
@@ -13,7 +13,8 @@ import './src/progress';
 import { Progres } from './src/progres-screen';
 import { Search } from './src/search';
 
-const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]];
+// Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
+const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
 const TOP = NAV.map((n) => n[0]);
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
   const [pulling, setPulling] = useState(false);
   const themePref = S.settings.theme || 'auto';
   const C = makeTheme(themePref === 'dark' || (themePref !== 'light' && scheme === 'dark'), S.settings.accent);
-  const topPad = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 50;
+  const topPad = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : isWeb ? 8 : 50;
   const [, setTick] = useState(0);
   const [view, setView] = useState({ name: 'home' });
   const [modal, setModal] = useState(null);
@@ -35,11 +36,10 @@ export default function App() {
       await load();
       setReady(true);
       reschedule(S);
-      silentRefresh();
-      setTimeout(() => checkClipboard(go), 800);
+      if (!isWeb) { silentRefresh(); setTimeout(() => checkClipboard(go), 800); }
     })();
     const sub = AppState.addEventListener('change', (st) => {
-      if (st === 'active') checkClipboard(go);
+      if (st === 'active') { if (!isWeb) checkClipboard(go); }
       else { persistNow(); reschedule(S); }
     });
     return () => sub.remove();
@@ -82,7 +82,8 @@ export default function App() {
   return (
     <Ctx.Provider value={ctx}>
       <StatusBar style={C.dark ? 'light' : 'dark'} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg, paddingTop: topPad }}>
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, width: '100%', maxWidth: isWeb ? 640 : undefined, backgroundColor: C.bg, paddingTop: topPad }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 }}>
           {!isTop && <Pressable onPress={back} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 20, color: C.ink, fontWeight: '800' }}>‹</Text></Pressable>}
           {title === null ? (
@@ -115,9 +116,10 @@ export default function App() {
           </View>
         )}
       </KeyboardAvoidingView>
+      </View>
       <Modal visible={!!modal} transparent animationType="slide" onRequestClose={() => setModal(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: C.card, borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: '92%' }}>
+          <View style={{ backgroundColor: C.card, borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: '92%', width: '100%', maxWidth: isWeb ? 640 : undefined, alignSelf: 'center' }}>
             <View style={{ alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: C.line, marginTop: 10 }} />
             <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
               {modal || null}

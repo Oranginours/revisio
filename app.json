@@ -61,6 +61,19 @@
     "updates": {
       "url": "https://u.expo.dev/79cb6953-c546-46bf-8139-9d3d43f38db7"
     },
-    "ios": {}
+    "ios": {},
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png",
+      "name": "Révisio",
+      "shortName": "Révisio",
+      "themeColor": "#4F46E5",
+      "backgroundColor": "#F4F4F8",
+      "lang": "fr"
+    },
+    "experiments": {
+      "baseUrl": "/revisio"
+    }
   }
 }

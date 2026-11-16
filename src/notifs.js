@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { today, addDays, diffDays, isArchived } from './logic';
 import { wakeCfg, wakePlan } from './alarm';
 
-Notifications.setNotificationHandler({
+if (Platform.OS !== 'web') Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true, shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
   }),
@@ -13,6 +13,7 @@ Notifications.setNotificationHandler({
 const CHANNEL = 'rappels';
 
 export async function askPermission() {
+  if (Platform.OS === 'web') return false;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
       name: 'Rappels de révision', importance: Notifications.AndroidImportance.HIGH,
@@ -26,6 +27,7 @@ export async function askPermission() {
 
 // Reprogramme les rappels des 7 prochains jours (appelé à l'ouverture, en quittant l'appli, après une session...).
 export async function reschedule(S) {
+  if (Platform.OS === 'web') return;
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of all) { if (n.content && n.content.data && n.content.data.daily) await Notifications.cancelScheduledNotificationAsync(n.identifier); }

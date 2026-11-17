@@ -12,10 +12,12 @@ import { Train, Tool, TOOL_TITLES } from './src/tools';
 import './src/progress';
 import { Progres } from './src/progres-screen';
 import { Search } from './src/search';
+import { Devoirs, todoCount, fetchHomework } from './src/devoirs';
 
 // Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
-const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'Emploi du temps'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
+const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'EDT'], ['devoirs', '📝', 'Devoirs'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
 const TOP = NAV.map((n) => n[0]);
+const addDaysStr = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 export default function App() {
   const scheme = useColorScheme();
@@ -36,7 +38,7 @@ export default function App() {
       await load();
       setReady(true);
       reschedule(S);
-      if (!isWeb) { silentRefresh(); setTimeout(() => checkClipboard(go), 800); }
+      if (!isWeb) { silentRefresh().then(() => fetchHomework()).catch(() => {}); setTimeout(() => checkClipboard(go), 800); }
     })();
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'active') { if (!isWeb) checkClipboard(go); }
@@ -70,6 +72,7 @@ export default function App() {
   if (v.name === 'home') screen = <Home />;
   if (v.name === 'edt') { title = 'Emploi du temps'; screen = <Edt />; }
   if (v.name === 'notes') { title = 'Mes notes'; screen = <Notes />; }
+  if (v.name === 'devoirs') { title = 'Devoirs'; screen = <Devoirs />; }
   if (v.name === 'train') { title = "S'entraîner"; screen = <Train />; }
   if (v.name === 'session') { title = v.mode === 'chapitre' && S.chs[v.chId] ? '🎯 ' + S.chs[v.chId].titre : sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} chId={v.chId} />; }
   if (v.name === 'tool') { title = TOOL_TITLES[v.tool] || 'Outil'; screen = <Tool tool={v.tool} mats={v.mats} />; }
@@ -96,21 +99,25 @@ export default function App() {
           {isTop && <Pressable onPress={() => go({ name: 'settings', back: v.name })} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 18 }}>⚙️</Text></Pressable>}
         </View>
         <ScrollView key={v.name + (v.id || '') + (v.tool || '') + (v.mode || '')} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled"
-          refreshControl={(v.name === 'edt' || v.name === 'notes') ? <RefreshControl refreshing={pulling} colors={[C.pri]} tintColor={C.pri}
+          refreshControl={(v.name === 'edt' || v.name === 'notes' || v.name === 'devoirs') ? <RefreshControl refreshing={pulling} colors={[C.pri]} tintColor={C.pri}
             onRefresh={async () => { if (!pull.fn) return; setPulling(true); try { await pull.fn(); } finally { setPulling(false); } }} /> : undefined}>
           <Guard key={v.name + (v.id || '') + (v.tool || '')} C={C} onHome={() => setView({ name: 'home' })}>{screen}</Guard>
         </ScrollView>
         {isTop && (
-          <View style={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: Platform.OS === 'android' ? 18 : isWeb ? 10 : 24, backgroundColor: C.bg }}>
-            <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 26, padding: 6, borderWidth: 1, borderColor: C.line,
-              shadowColor: '#000', shadowOpacity: C.dark ? 0.4 : 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 10 }}>
+          <View style={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: Platform.OS === 'android' ? 8 : isWeb ? 6 : 18, backgroundColor: C.bg }}>
+            <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 20, padding: 4, borderWidth: 1, borderColor: C.line,
+              shadowColor: '#000', shadowOpacity: C.dark ? 0.35 : 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}>
               {NAV.map(([k, icon, label]) => {
                 const on = v.name === k;
+                const badge = k === 'devoirs' ? todoCount(addDaysStr(1)) : 0;
                 return (
                   <Pressable key={k} onPress={() => go({ name: k })}
-                    style={({ pressed }) => ({ flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 20, backgroundColor: on ? C.priSoft : 'transparent', transform: [{ scale: pressed ? 0.94 : 1 }] })}>
-                    <Text style={{ fontSize: 21, opacity: on ? 1 : 0.5 }}>{icon}</Text>
-                    <Text numberOfLines={1} style={{ fontSize: 10.5, marginTop: 2, color: on ? C.priInk : C.muted, fontWeight: on ? '800' : '600' }}>{label}</Text>
+                    style={({ pressed }) => ({ flex: 1, alignItems: 'center', paddingVertical: 4, borderRadius: 16, backgroundColor: on ? C.priSoft : 'transparent', transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+                    <Text style={{ fontSize: 17, opacity: on ? 1 : 0.55 }}>{icon}</Text>
+                    <Text numberOfLines={1} style={{ fontSize: 10, color: on ? C.priInk : C.muted, fontWeight: on ? '800' : '600' }}>{label}</Text>
+                    {badge > 0 && <View style={{ position: 'absolute', top: 1, right: '22%', minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>{badge}</Text>
+                    </View>}
                   </Pressable>
                 );
               })}

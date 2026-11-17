@@ -20,6 +20,7 @@ export const wakeCfg = () => {
   const r = S.settings.reveil || (S.settings.reveil = {});
   const d = { on: false, trajet: 40, prep: 30, notif: true, depart: true };
   Object.keys(d).forEach((k) => { if (r[k] === undefined) r[k] = d[k]; });
+  r.on = false; // le réveil a été retiré, seul le bus reste
   return r;
 };
 const hm = (d) => String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
@@ -93,7 +94,7 @@ function MorningCard() {
   if ((!c.on && !(c.bus && c.bus.on)) || !S.pronote) return null;
   const wakeMode = !!c.on;
   const p = nextWake(wakeMode ? 'wake' : 'depart');
-  if (!p) return null;
+  if (!p || (!wakeMode && !p.bus)) return null;
   const isTomorrow = p.day === addDays(today(), 1), isToday = p.day === today();
   const done = c.setFor === keyOf(p);
   return (
@@ -139,46 +140,25 @@ export function WakeSettings({ onChange }) {
   const c = wakeCfg();
   const [, setT] = useState(0);
   const set = (k, v, quiet) => { c[k] = v; c.setFor = ''; commit(); setT((t) => t + 1); if (onChange && !quiet) onChange(k, v); };
-  const p = nextWake();
+  const b = c.bus || {};
+  const p = b.on ? nextWake('depart') : null;
+  const r = b.on && p ? returnPlan(c, p.day) : null;
   return (
     <Card>
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
-        <Txt style={{ flex: 1 }} bold>Réveil calé sur mon premier cours</Txt>
-        <Switch value={!!c.on} onValueChange={(v) => set('on', v)} trackColor={{ true: C.pri }} />
-      </Row>
-      {!S.pronote && <Txt muted style={{ marginTop: 6 }}>Connecte Pronote pour que l'appli connaisse ton premier cours.</Txt>}
+      {!S.pronote && <Txt muted style={{ marginBottom: 6 }}>Connecte Pronote pour que l'appli connaisse tes horaires de cours.</Txt>}
       <BusSettings cfg={c} set={set} />
-      {c.on && (
+      {b.on && (
         <View>
-          {!(c.bus && c.bus.on && c.bus.aller && c.bus.aller.passages.length) && (
-            <View>
-              <Label>Trajet (de chez toi au cours)</Label>
-              <Stepper value={c.trajet} onChange={(v) => set('trajet', v)} />
-            </View>
-          )}
-          <Label>Préparation (du réveil au départ)</Label>
-          <Stepper value={c.prep} onChange={(v) => set('prep', v)} />
-          {p ? (
+          {p && p.bus ? (
             <View style={{ backgroundColor: C.priSoft, borderRadius: 16, padding: 14, marginTop: 14 }}>
-              <Text style={{ color: C.priInk, fontWeight: '800' }}>{p.day === addDays(today(), 1) ? 'Demain' : fmtDate(p.day)} : cours à {p.label.start} → départ {p.label.depart} → réveil {p.label.wake}</Text>
-              {p.bus && <Text style={{ color: C.priInk, marginTop: 4 }}>🚌 Bus de {p.bus.label.bus} (tu seras à l'arrêt {c.bus.avance} min avant){p.bus.label.prev ? `. Le précédent passe à ${p.bus.label.prev}.` : ''}</Text>}
-              {p.busMiss && <Text style={{ color: C.bad, marginTop: 4 }}>⚠️ Aucun bus enregistré ne t'amène assez tôt : calcul fait avec la durée de trajet.</Text>}
-              {(() => { const r = returnPlan(c, p.day); return r ? <Text style={{ color: C.priInk, marginTop: 4 }}>🏠 Retour : fin des cours {r.label.end} → sors à {r.label.leave} pour le bus de {r.label.bus}</Text> : null; })()}
+              <Text style={{ color: C.priInk, fontWeight: '800' }}>{p.day === today() ? "Aujourd'hui" : p.day === addDays(today(), 1) ? 'Demain' : fmtDate(p.day)} : cours à {p.label.start} → pars de chez toi à {p.label.depart} (bus de {p.bus.label.bus})</Text>
+              {r && <Text style={{ color: C.priInk, marginTop: 4 }}>🏠 Retour : fin des cours {r.label.end} → sors à {r.label.leave} pour le bus de {r.label.bus}</Text>}
             </View>
-          ) : <Txt muted style={{ marginTop: 10 }}>Aucun cours trouvé cette semaine et la suivante (ouvre l'emploi du temps pour le charger).</Txt>}
+          ) : p && p.busMiss ? <Txt muted style={{ marginTop: 10 }}>⚠️ Aucun bus enregistré ne t'amène assez tôt pour ton prochain cours.</Txt> : null}
           <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 14 }}>
-            <Txt style={{ flex: 1 }}>🔔 Notification de réveil (de secours)</Txt>
-            <Switch value={!!c.notif} onValueChange={(v) => set('notif', v)} trackColor={{ true: C.pri }} />
-          </Row>
-          <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 8 }}>
-            <Txt style={{ flex: 1 }}>🚌 Rappel « c'est l'heure de partir »</Txt>
+            <Txt style={{ flex: 1 }}>🔔 Notification « c'est l'heure de partir »</Txt>
             <Switch value={!!c.depart} onValueChange={(v) => set('depart', v)} trackColor={{ true: C.pri }} />
           </Row>
-          <Txt muted style={{ marginTop: 10, fontSize: 12 }}>
-            {Platform.OS === 'android'
-              ? "Le plus fiable : le bouton « Mettre dans l'Horloge » sur l'accueil, qui crée un vrai réveil. La notification est un secours : elle sonne moins fort et peut avoir quelques minutes de retard."
-              : 'Sur iPhone, seule la notification est possible.'}
-          </Txt>
         </View>
       )}
     </Card>

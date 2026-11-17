@@ -41,7 +41,7 @@ async function getSession(force) {
   SESSION = session;
   return session;
 }
-async function withSession(fn) {
+export async function withSession(fn) {
   try { return await fn(await getSession()); } catch (e) {
     if (/Reconnecte|Pas connecté/.test(e.message)) throw e;
     try { return await fn(await getSession(true)); } catch (e2) {

@@ -114,7 +114,7 @@ async function scheduleWake(S) {
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.wake, channelId: WAKE },
       });
     }
-    if (c.depart && p.depart.getTime() > now + 60000) {
+    if (c.depart && p.bus && p.depart.getTime() > now + 60000) {
       await Notifications.scheduleNotificationAsync({
         content: { title: "🚌 C'est l'heure de partir !", body: p.bus ? `Bus de ${p.bus.label.bus} · ${p.lesson.subject} à ${p.label.start}${where}.` : `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.depart, channelId: WAKE },

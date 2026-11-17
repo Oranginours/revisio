@@ -14,6 +14,7 @@ import { DsDetected, QrLogin, logoutPronote, firstName, NextLesson } from './sch
 import { tipOfDay } from './tools';
 import { levelInfo, levelTitle, sessionDone } from './progress';
 import { WakeCard, WakeSettings } from './alarm';
+import { HomeworkCard } from './devoirs';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -98,6 +99,7 @@ export function Home() {
 
       <WebInstall />
       <GettingStarted />
+      <HomeworkCard />
       <WakeCard />
       <NextLesson />
       <LevelRow />
@@ -565,7 +567,7 @@ export function Settings() {
       </Card>
 
       {!isWeb && <>
-      <Section>RÉVEIL & BUS 🚌</Section>
+      <Section>BUS 🚌</Section>
       <WakeSettings onChange={async (k, v) => { if ((k === 'on' && v) || (k === 'bus' && v && v.on)) await askPermission(); reschedule(S); }} />
 
       <Section>RAPPELS</Section>

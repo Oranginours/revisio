@@ -12,6 +12,7 @@ export const S = {
   pronote: null, // { refresh: {url, token, username, kind, navigatorIdentifier}, deviceUUID, name, className }
   cache: { edt: {}, grades: {}, gradesPeriods: [], gradesAt: '', dsSeen: {} },
   imported: {},
+  devoirs: { manual: [], doneP: {} },
 };
 
 export async function load() {
@@ -25,6 +26,7 @@ export async function load() {
     S.pronote = o.pronote || null;
     Object.assign(S.cache, o.cache || {});
     S.imported = o.imported || {};
+    if (o.devoirs) S.devoirs = o.devoirs;
   } catch (e) {}
 }
 

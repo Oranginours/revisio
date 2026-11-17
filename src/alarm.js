@@ -5,7 +5,7 @@ import { View, Text, Pressable, Platform, Switch } from 'react-native';
 import { useApp, Card, Txt, Btn, Row, Label, toast } from './ui';
 import { dstr, today, addDays, fmtDate } from './logic';
 import { S, commit } from './store';
-import { busCfg, pickBus, BusSettings } from './bus';
+import { busCfg, pickBus, returnPlan, BusSettings } from './bus';
 
 // Module natif « Reveil » (présent seulement dans un APK fabriqué après son ajout)
 let Native = null;
@@ -39,7 +39,7 @@ export function wakePlan(day) {
   if (!l) return null;
   const start = new Date(l.start);
   const b = busCfg(c);
-  const bus = b.on && b.passages.length ? pickBus(b, start) : null;
+  const bus = b.on && b.aller.passages.length ? pickBus(b, start) : null;
   const depart = bus && bus.departHome ? bus.departHome : new Date(start.getTime() - c.trajet * 60000);
   const wake = new Date(depart.getTime() - c.prep * 60000);
   return { day, lesson: l, start, depart, wake, bus: bus && bus.bus ? bus : null, busMiss: !!(bus && bus.tooEarly), label: { start: hm(start), depart: hm(depart), wake: hm(wake) } };
@@ -72,6 +72,22 @@ export function showPhoneAlarms() { try { if (Native) Native.showAlarms(); } cat
 
 // Carte de l'accueil : le prochain réveil
 export function WakeCard() {
+  const c = wakeCfg();
+  const r = S.pronote ? returnPlan(c, today()) : null;
+  const ret = r && r.leave > new Date() ? r : null;
+  return <View>{ret && <ReturnCard r={ret} />}<MorningCard /></View>;
+}
+function ReturnCard({ r }) {
+  const { C } = useApp();
+  return (
+    <Card>
+      <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>🏠 RETOUR CE SOIR</Text>
+      <Text style={{ color: C.ink, fontSize: 40, fontWeight: '900', letterSpacing: -1 }}>{r.label.leave}</Text>
+      <Text style={{ color: C.muted, fontSize: 13 }}>Fin des cours {r.label.end} · sors à {r.label.leave} pour le bus de {r.label.bus}</Text>
+    </Card>
+  );
+}
+function MorningCard() {
   const { C, go } = useApp();
   const c = wakeCfg();
   if ((!c.on && !(c.bus && c.bus.on)) || !S.pronote) return null;
@@ -87,7 +103,7 @@ export function WakeCard() {
           <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>{wakeMode ? '⏰ RÉVEIL' : '🚪 DÉPART'} {isToday ? "AUJOURD'HUI" : isTomorrow ? 'DEMAIN' : fmtDate(p.day).toUpperCase()}</Text>
           <Text style={{ color: C.ink, fontSize: 40, fontWeight: '900', letterSpacing: -1 }}>{wakeMode ? p.label.wake : p.label.depart}</Text>
           <Text style={{ color: C.muted, fontSize: 13 }}>{wakeMode ? `🚪 départ ${p.label.depart} · ` : ''}🏫 {p.lesson.subject} à {p.label.start}</Text>
-          {p.bus && <Text style={{ color: C.priInk, fontSize: 13, fontWeight: '800', marginTop: 2 }}>🚌 Bus de {p.bus.label.bus}{c.bus.ligne ? ` (ligne ${c.bus.ligne})` : ''} → arrivée {p.bus.label.arr}{p.bus.label.prev ? ` · secours : ${p.bus.label.prev}` : ''}</Text>}
+          {p.bus && <Text style={{ color: C.priInk, fontSize: 13, fontWeight: '800', marginTop: 2 }}>🚌 Bus de {p.bus.label.bus}{c.bus.aller.ligne ? ` (ligne ${c.bus.aller.ligne})` : ''}{p.bus.label.prev ? ` · plus tôt : ${p.bus.label.prev}` : ''}</Text>}
         </View>
         <Pressable onPress={() => go({ name: 'settings', back: 'home' })} hitSlop={10}><Text style={{ fontSize: 20 }}>⚙️</Text></Pressable>
       </View>
@@ -134,7 +150,7 @@ export function WakeSettings({ onChange }) {
       <BusSettings cfg={c} set={set} />
       {c.on && (
         <View>
-          {!(c.bus && c.bus.on && c.bus.passages.length) && (
+          {!(c.bus && c.bus.on && c.bus.aller && c.bus.aller.passages.length) && (
             <View>
               <Label>Trajet (de chez toi au cours)</Label>
               <Stepper value={c.trajet} onChange={(v) => set('trajet', v)} />
@@ -145,8 +161,9 @@ export function WakeSettings({ onChange }) {
           {p ? (
             <View style={{ backgroundColor: C.priSoft, borderRadius: 16, padding: 14, marginTop: 14 }}>
               <Text style={{ color: C.priInk, fontWeight: '800' }}>{p.day === addDays(today(), 1) ? 'Demain' : fmtDate(p.day)} : cours à {p.label.start} → départ {p.label.depart} → réveil {p.label.wake}</Text>
-              {p.bus && <Text style={{ color: C.priInk, marginTop: 4 }}>🚌 Bus de {p.bus.label.bus}, arrivée {p.bus.label.arr}{p.bus.label.prev ? `. Si tu veux de la marge : celui de ${p.bus.label.prev}.` : ''}</Text>}
-              {p.busMiss && <Text style={{ color: C.bad || '#DC2626', marginTop: 4 }}>⚠️ Aucun bus enregistré n'arrive assez tôt : calcul fait avec la durée de trajet.</Text>}
+              {p.bus && <Text style={{ color: C.priInk, marginTop: 4 }}>🚌 Bus de {p.bus.label.bus} (tu seras à l'arrêt {c.bus.avance} min avant){p.bus.label.prev ? `. Le précédent passe à ${p.bus.label.prev}.` : ''}</Text>}
+              {p.busMiss && <Text style={{ color: C.bad, marginTop: 4 }}>⚠️ Aucun bus enregistré ne t'amène assez tôt : calcul fait avec la durée de trajet.</Text>}
+              {(() => { const r = returnPlan(c, p.day); return r ? <Text style={{ color: C.priInk, marginTop: 4 }}>🏠 Retour : fin des cours {r.label.end} → sors à {r.label.leave} pour le bus de {r.label.bus}</Text> : null; })()}
             </View>
           ) : <Txt muted style={{ marginTop: 10 }}>Aucun cours trouvé cette semaine et la suivante (ouvre l'emploi du temps pour le charger).</Txt>}
           <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 14 }}>

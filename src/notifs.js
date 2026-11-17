@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { today, addDays, diffDays, isArchived } from './logic';
 import { wakeCfg, wakePlan } from './alarm';
+import { returnPlan } from './bus';
 
 if (Platform.OS !== 'web') Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -115,8 +116,15 @@ async function scheduleWake(S) {
     }
     if (c.depart && p.depart.getTime() > now + 60000) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "🚌 C'est l'heure de partir !", body: p.bus ? `Bus de ${p.bus.label.bus} (arrivée ${p.bus.label.arr}) · ${p.lesson.subject} à ${p.label.start}${where}.` : `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
+        content: { title: "🚌 C'est l'heure de partir !", body: p.bus ? `Bus de ${p.bus.label.bus} · ${p.lesson.subject} à ${p.label.start}${where}.` : `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.depart, channelId: WAKE },
+      });
+    }
+    const r = c.depart ? returnPlan(c, p.day) : null;
+    if (r && r.leave.getTime() > now + 60000) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: "🏠 C'est l'heure d'aller au bus !", body: `Bus de ${r.label.bus} : sors maintenant pour être à l'arrêt à l'heure.`, data: { daily: true, wake: true }, sound: 'default' },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: r.leave, channelId: WAKE },
       });
     }
   }

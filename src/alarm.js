@@ -16,8 +16,11 @@ try {
 export const canSetPhoneAlarm = () => !!Native;
 
 export const wakeCfg = () => {
-  S.settings.reveil = { on: false, trajet: 40, prep: 30, notif: true, depart: true, ...(S.settings.reveil || {}) };
-  return S.settings.reveil;
+  // on complète l'objet existant au lieu d'en recréer un (sinon les interrupteurs modifiaient une copie perdue)
+  const r = S.settings.reveil || (S.settings.reveil = {});
+  const d = { on: false, trajet: 40, prep: 30, notif: true, depart: true };
+  Object.keys(d).forEach((k) => { if (r[k] === undefined) r[k] = d[k]; });
+  return r;
 };
 const hm = (d) => String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
 

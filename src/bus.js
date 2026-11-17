@@ -9,8 +9,11 @@ import { S } from './store';
 import { gemini, prepareImage } from './ai';
 
 export const busCfg = (c) => {
-  c.bus = { on: false, ligne: '', from: '', to: '', walkTo: 5, walkFrom: 10, duree: 20, passages: [], ...(c.bus || {}) };
-  return c.bus;
+  const b = c.bus || (c.bus = {});
+  const d = { on: false, ligne: '', from: '', to: '', walkTo: 5, walkFrom: 10, duree: 20 };
+  Object.keys(d).forEach((k) => { if (b[k] === undefined) b[k] = d[k]; });
+  if (!Array.isArray(b.passages)) b.passages = [];
+  return b;
 };
 const toMin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 const fromMin = (n) => String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');

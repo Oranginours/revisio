@@ -9,6 +9,7 @@ import { uid, dstr, today, fmtDate, mondayOf, norm, diffDays, isArchived } from 
 import { S, commit, persistNow, chaptersOf } from './store';
 import { reschedule } from './notifs';
 import { ChapitreForm, newMatiere } from './forms';
+import { openAvgSim } from './avgsim';
 
 /* ================= Connexion ================= */
 // Pronote donne « NOM Prénom » : on garde le prénom
@@ -326,6 +327,7 @@ export function Notes() {
             <Txt muted>Moyenne générale · {data.period}</Txt>
             <Text style={{ fontSize: 34, fontWeight: '800', color: color(data.overall) }}>{fmtN(data.overall)}</Text>
             {data.classOverall !== null && <Txt muted>Classe : {fmtN(data.classOverall)}</Txt>}
+            <Btn label="🧮 Simuler ma moyenne" style={{ marginTop: 12, alignSelf: 'stretch' }} onPress={() => openAvgSim(data, setModal)} />
           </Card>
           <Card>
             <H2>Par matière</H2>
@@ -338,7 +340,10 @@ export function Notes() {
                     <View style={{ flex: 1 }}><Txt bold>{s.name}</Txt>{s.cls !== null && <Txt muted>Classe : {fmtN(s.cls)}</Txt>}</View>
                     <Text style={{ fontSize: 18, fontWeight: '800', color: color(s.avg, s.outOf) }}>{fmtN(s.avg)}</Text>
                   </Pressable>
-                  {open === s.name && <Btn small kind="sec" label="🧮 Simuler une note" style={{ alignSelf: 'flex-start', marginLeft: 20, marginBottom: 6 }} onPress={() => openSim(s.name, gs, setModal)} />}
+                  {open === s.name && <Row style={{ marginLeft: 20, marginBottom: 6 }}>
+                    <Btn small kind="sec" label="🧮 Simuler" onPress={() => openAvgSim(data, setModal, s.name)} />
+                    <Btn small kind="sec" label="🎯 Note à viser" onPress={() => openSim(s.name, gs, setModal)} />
+                  </Row>}
                   {open === s.name && gs.map((g) => { const lc = chapterOfGrade(g.id); return (
                     <Pressable key={g.id} onPress={() => pickChapterForGrade(g, setModal)} style={{ flexDirection: 'row', gap: 10, paddingVertical: 6, paddingLeft: 20 }}>
                       <View style={{ flex: 1 }}><Txt>{g.comment || 'Évaluation'}</Txt><Txt muted>{fmtDate(g.date.slice(0, 10))} · coef {g.coef}{g.avg !== null ? ' · classe ' + fmtN(g.avg) : ''}</Txt><Txt muted>{lc ? '🔗 ' + lc.titre : '＋ Associer à un chapitre'}</Txt></View>

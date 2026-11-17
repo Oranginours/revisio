@@ -13,6 +13,7 @@ import './src/progress';
 import { Progres } from './src/progres-screen';
 import { Search } from './src/search';
 import { Devoirs, todoCount, fetchHomework } from './src/devoirs';
+import { DefiPlay } from './src/defi';
 
 // Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
 const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'EDT'], ['devoirs', '📝', 'Devoirs'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
@@ -73,6 +74,7 @@ export default function App() {
   if (v.name === 'edt') { title = 'Emploi du temps'; screen = <Edt />; }
   if (v.name === 'notes') { title = 'Mes notes'; screen = <Notes />; }
   if (v.name === 'devoirs') { title = 'Devoirs'; screen = <Devoirs />; }
+  if (v.name === 'defi') { title = '⚔️ Défi'; screen = <DefiPlay id={v.id} />; }
   if (v.name === 'train') { title = "S'entraîner"; screen = <Train />; }
   if (v.name === 'session') { title = v.mode === 'chapitre' && S.chs[v.chId] ? '🎯 ' + S.chs[v.chId].titre : sessionTitle(v.mode); screen = <Session mode={v.mode} mats={v.mats} chId={v.chId} />; }
   if (v.name === 'tool') { title = TOOL_TITLES[v.tool] || 'Outil'; screen = <Tool tool={v.tool} mats={v.mats} />; }
@@ -104,7 +106,7 @@ export default function App() {
           <Guard key={v.name + (v.id || '') + (v.tool || '')} C={C} onHome={() => setView({ name: 'home' })}>{screen}</Guard>
         </ScrollView>
         {isTop && (
-          <View style={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: Platform.OS === 'android' ? 8 : isWeb ? 6 : 18, backgroundColor: C.bg }}>
+          <View style={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: Platform.OS === 'android' ? 24 : isWeb ? 10 : 22, backgroundColor: C.bg }}>
             <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 20, padding: 4, borderWidth: 1, borderColor: C.line,
               shadowColor: '#000', shadowOpacity: C.dark ? 0.35 : 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}>
               {NAV.map(([k, icon, label]) => {

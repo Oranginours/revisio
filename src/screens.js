@@ -15,6 +15,7 @@ import { tipOfDay } from './tools';
 import { levelInfo, levelTitle, sessionDone } from './progress';
 import { WakeCard, WakeSettings } from './alarm';
 import { HomeworkCard } from './devoirs';
+import { TomorrowCard } from './tomorrow';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -99,6 +100,7 @@ export function Home() {
 
       <WebInstall />
       <GettingStarted />
+      <TomorrowCard />
       <HomeworkCard />
       <WakeCard />
       <NextLesson />

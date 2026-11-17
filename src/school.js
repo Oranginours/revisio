@@ -9,7 +9,8 @@ import { uid, dstr, today, fmtDate, mondayOf, norm, diffDays, isArchived } from 
 import { S, commit, persistNow, chaptersOf } from './store';
 import { reschedule } from './notifs';
 import { ChapitreForm, newMatiere } from './forms';
-import { openAvgSim } from './avgsim';
+import { openAvgSim, AvgTrend } from './avgsim';
+import { allHomework, openHomeworkForm } from './devoirs';
 
 /* ================= Connexion ================= */
 // Pronote donne « NOM Prénom » : on garde le prénom
@@ -245,6 +246,8 @@ export function Edt() {
   const days = [...Array(6)].map((_, i) => { const d = new Date(monday); d.setDate(d.getDate() + i); return dstr(d); });
   const lessons = ((week && week.lessons) || []).filter((l) => dstr(new Date(l.start)) === days[day]);
   const hasSat = ((week && week.lessons) || []).some((l) => dstr(new Date(l.start)) === days[5]);
+  const hwDay = allHomework().filter((h) => h.due === days[day]);
+  const hwFor = (l, mid) => hwDay.filter((h) => (mid && h.mid === mid) || h.subject === l.subject);
   return (
     <View>
       <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginBottom: 10 }}>
@@ -284,12 +287,23 @@ export function Edt() {
             <View style={{ flex: 1 }}>
               <Text style={{ color: C.ink, fontWeight: '700', fontSize: 15, textDecorationLine: l.canceled ? 'line-through' : 'none' }}>{l.subject}</Text>
               <Txt muted>{[l.room, l.teacher].filter(Boolean).join(' · ')}</Txt>
+              {hwFor(l, mid).map((h) => (
+                <Pressable key={h.src + h.id} onPress={() => ctx.go({ name: 'devoirs' })} style={{ flexDirection: 'row', gap: 6, marginTop: 6, backgroundColor: h.done ? C.okSoft : C.warnSoft, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5 }}>
+                  <Text style={{ fontSize: 12 }}>{h.done ? '✅' : '📝'}</Text>
+                  <Text numberOfLines={2} style={{ flex: 1, color: C.ink, fontSize: 13, textDecorationLine: h.done ? 'line-through' : 'none' }}>{h.text}</Text>
+                </Pressable>
+              ))}
               <Row style={{ marginTop: 4 }}>
                 {live && <Chip>⏺ En cours</Chip>}
                 {l.test && <Chip>📝 DS / contrôle</Chip>}
                 {l.status ? <Chip>{l.status}</Chip> : null}
                 {m ? <Txt muted>→ {m.nom} ›</Txt> : <Txt muted>Toucher pour relier à une matière ›</Txt>}
               </Row>
+              {m && !l.canceled && (
+                <Pressable hitSlop={6} onPress={() => openHomeworkForm(ctx.setModal, null, { mid })} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+                  <Text style={{ color: C.pri, fontWeight: '800', fontSize: 13 }}>＋ Noter un devoir</Text>
+                </Pressable>
+              )}
             </View>
           </Pressable>
         );
@@ -329,6 +343,7 @@ export function Notes() {
             {data.classOverall !== null && <Txt muted>Classe : {fmtN(data.classOverall)}</Txt>}
             <Btn label="🧮 Simuler ma moyenne" style={{ marginTop: 12, alignSelf: 'stretch' }} onPress={() => openAvgSim(data, setModal)} />
           </Card>
+          <AvgTrend data={data} />
           <Card>
             <H2>Par matière</H2>
             {data.subjects.map((s) => {

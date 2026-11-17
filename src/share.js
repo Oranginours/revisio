@@ -8,6 +8,7 @@ import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast, ask, isWeb } from 
 import { uid, COLORS, normPack } from './logic';
 import { reschedule } from './notifs';
 import { S, commit, matOf } from './store';
+import { importDefi, isDefiText, createDefi, canDefi } from './defi';
 import { flag } from './progress';
 
 /* ---------- fichiers : téléphone (partage) ou navigateur (téléchargement) ---------- */
@@ -81,6 +82,7 @@ export function importText(txt) {
   commit(); reschedule(S);
   return ids;
 }
+const sig2 = (t) => 'defi:' + t.length + ':' + t.slice(-80);
 const sig = (t) => { const i = t.indexOf('REVISIONS:'); return t.length + ':' + t.slice(i, i + 120); };
 
 // Appelé quand on ouvre l'appli : si un chapitre a été copié, on propose de l'importer.
@@ -88,6 +90,14 @@ export async function checkClipboard(go) {
   try {
     if (!(await Clipboard.hasStringAsync())) return;
     const t = await Clipboard.getStringAsync();
+    if (t && isDefiText(t) && !S.imported[sig2(t)]) {
+      const m = t.match(/⚔️ (.+?) te défie sur « (.+?) »/);
+      ask('⚔️ Défi reçu', m ? `${m[1]} te défie sur « ${m[2]} ». Tu relèves le défi ?` : 'Tu as copié un défi. Tu le relèves ?', [
+        { text: 'Plus tard', style: 'cancel', onPress: () => { S.imported[sig2(t)] = 1; commit(); } },
+        { text: 'Jouer !', onPress: () => { try { S.imported[sig2(t)] = 1; const d = importDefi(t); go({ name: 'defi', id: d.id, back: 'train' }); } catch (e) { toast('Le défi copié est incomplet.', 'bad'); } } },
+      ]);
+      return;
+    }
     if (!t || t.indexOf('REVISIONS:') < 0 || S.imported[sig(t)]) return;
     const m = t.match(/Chapitre « (.+?) »/);
     ask('📥 Chapitre copié', `Tu as copié ${m ? '« ' + m[1] + ' »' : 'un chapitre'}. L'ajouter à tes révisions ?`, [
@@ -102,7 +112,10 @@ export function ImportForm() {
   const [txt, setTxt] = useState('');
   const [err, setErr] = useState('');
   const done = (ids) => { setModal(null); if (ids.length === 1) go({ name: 'ch', id: ids[0], tab: 'cours' }); else toast(`Importé ✨ ${ids.length} chapitres ajoutés`); };
-  const fromText = (t) => { try { done(importText(t)); } catch (e) { setErr('Pas de chapitre valide là-dedans. Copie bien le message en entier.'); } };
+  const fromText = (t) => {
+    if (isDefiText(t)) { try { const d = importDefi(t); setModal(null); go({ name: 'defi', id: d.id, back: 'train' }); } catch (e) { setErr('Défi incomplet. Copie bien le message en entier.'); } return; }
+    try { done(importText(t)); } catch (e) { setErr('Pas de chapitre valide là-dedans. Copie bien le message en entier.'); }
+  };
   const paste = async () => { try { const t = await Clipboard.getStringAsync(); setTxt(t); fromText(t); } catch (e) { setErr('Impossible de lire le presse-papiers. Colle le message à la main.'); } };
   const pickFile = async () => {
     try {
@@ -129,7 +142,7 @@ export function ImportForm() {
 }
 
 export function ShareChoice({ ch }) {
-  const { setModal } = useApp();
+  const { setModal, go } = useApp();
   return (
     <View>
       <H2>📤 Partager « {ch.titre} »</H2>
@@ -138,6 +151,7 @@ export function ShareChoice({ ch }) {
       <Txt muted style={{ marginTop: 6 }}>Ton pote appuie longtemps sur le message → Copier, puis ouvre l'appli : elle propose l'import toute seule.</Txt>
       <Btn kind="sec" label="📁 Envoyer en fichier" style={{ marginTop: 14 }} onPress={() => { setModal(null); shareFile([ch], ch.titre); }} />
       <Txt muted style={{ marginTop: 6 }}>Ton pote enregistre le fichier, puis 📥 Importer → Choisir le fichier.</Txt>
+      {canDefi(ch) && <Btn kind="sec" label="⚔️ Lancer un défi sur ce chapitre" style={{ marginTop: 14 }} onPress={() => { const d = createDefi(ch); setModal(null); go({ name: 'defi', id: d.id, back: 'home' }); }} />}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 16, alignSelf: 'flex-start' }} onPress={() => setModal(null)} />
     </View>
   );

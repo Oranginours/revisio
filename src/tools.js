@@ -1,5 +1,6 @@
 // Onglet « S'entraîner » : modes de révision et outils pour mieux apprendre.
 import React, { useState, useEffect, useRef } from 'react';
+import { DefiPicker, DefiList } from './defi';
 import { View, Text, Pressable } from 'react-native';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Opt, Fb, Progress, Input, Rich, Note } from './ui';
 import { shuffle, items, grade, randomItems, errorItems, buildCloze, norm, stripTags, num, today, pickPhrase } from './logic';
@@ -24,7 +25,7 @@ const selChs = (mats) => activeChs().filter((c) => !mats || !mats.length || mats
 
 /* ================= Hub ================= */
 export function Train() {
-  const { C, go } = useApp();
+  const { C, go, setModal } = useApp();
   const [mats, setMats] = useState([]);
   const chs = selChs(mats);
   const nErr = errorItems(chs).length;
@@ -51,8 +52,10 @@ export function Train() {
         <T icon="📝" title="Examen blanc" sub="Note sur 20" onPress={() => go({ name: 'tool', tool: 'exam', mats, back: 'train' })} />
         <T icon="🍅" title="Pomodoro" sub="25 min de concentration" onPress={() => go({ name: 'tool', tool: 'pomodoro', back: 'train' })} />
         <T icon="📈" title="Mes progrès" sub="Niveau, stats, badges" onPress={() => go({ name: 'progres', back: 'train' })} />
+        <T icon="⚔️" title="Défier un pote" sub="Même quiz, meilleur score" onPress={() => setModal(<DefiPicker />)} />
         <T icon="💡" title="Bien apprendre" sub="10 conseils qui marchent" onPress={() => go({ name: 'tool', tool: 'conseils', back: 'train' })} />
       </View>
+      <DefiList />
     </View>
   );
 }

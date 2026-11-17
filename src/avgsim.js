@@ -180,3 +180,56 @@ export function AvgSim({ data, subject }) {
   );
 }
 export const openAvgSim = (data, setModal, subject) => setModal(<AvgSim data={data} subject={subject} />);
+
+// 📈 Évolution de la moyenne générale, note après note (recalculée à partir des notes visibles)
+export function avgHistory(data) {
+  const gs = data.grades.filter(valid).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const per = {}; const pts = [];
+  gs.forEach((g, k) => {
+    const s = (per[g.subject] = per[g.subject] || { w: 0, sum: 0 });
+    s.w += g.coef || 1; s.sum += (g.value / g.outOf) * 20 * (g.coef || 1);
+    const day = String(g.date).slice(0, 10);
+    const next = gs[k + 1];
+    if (next && String(next.date).slice(0, 10) === day) return; // un point par jour
+    const avgs = Object.values(per).filter((x) => x.w).map((x) => x.sum / x.w);
+    pts.push({ day, v: avgs.reduce((a, b) => a + b, 0) / avgs.length, g });
+  });
+  return pts;
+}
+export function AvgTrend({ data }) {
+  const { C } = useApp();
+  const [sel, setSel] = useState(null);
+  const pts = avgHistory(data).slice(-14);
+  if (pts.length < 3) return null;
+  const vs = pts.map((p) => p.v);
+  const lo = Math.max(0, Math.floor(Math.min(...vs)) - 1), hi = Math.min(20, Math.ceil(Math.max(...vs)) + 1);
+  const H = 90;
+  const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+  const d = last.v - prev.v;
+  const shown = sel !== null ? pts[sel] : last;
+  const col = (v) => (v >= 14 ? C.ok : v >= 10 ? C.warn : C.bad);
+  return (
+    <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: C.line }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <View>
+          <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>📈 ÉVOLUTION</Text>
+          <Text style={{ color: C.ink, fontSize: 22, fontWeight: '900' }}>{fmt(shown.v)}</Text>
+          <Text style={{ color: C.muted, fontSize: 12 }} numberOfLines={1}>{sel !== null ? `après ${shown.g.subject.toLowerCase()} (${fmt(shown.g.value)}/${fmt(shown.g.outOf)})` : 'aujourd\'hui (estimation)'}</Text>
+        </View>
+        <Text style={{ fontWeight: '900', color: d >= 0 ? C.ok : C.bad }}>{d >= 0 ? '▲ +' : '▼ '}{fmt(d)}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: H, marginTop: 12 }}>
+        {pts.map((p, k) => {
+          const h = 8 + ((p.v - lo) / Math.max(1, hi - lo)) * (H - 8);
+          const on = sel === k || (sel === null && k === pts.length - 1);
+          return (
+            <Pressable key={k} onPress={() => setSel(sel === k ? null : k)} style={{ flex: 1, height: H, justifyContent: 'flex-end' }}>
+              <View style={{ height: h, borderRadius: 6, backgroundColor: on ? col(p.v) : C.priSoft }} />
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>Touche une barre pour voir la moyenne à ce moment-là.</Text>
+    </View>
+  );
+}

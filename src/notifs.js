@@ -44,9 +44,20 @@ export async function reschedule(S) {
     const t = today();
     const chs = Object.values(S.chs || {}).filter((c) => !isArchived(c));
     const matName = (c) => ((S.profil.matieres || []).find((x) => x.id === c.matiereId) || {}).nom || '';
+    // devoirs non faits pour un jour donné (Pronote + ajoutés à la main)
+    const dv = S.devoirs || {}, doneP = dv.doneP || {};
+    const hwFor = (day) => {
+      const out = [];
+      (S.cache.hw || []).forEach((h) => { const done = doneP[h.id] !== undefined ? doneP[h.id] : h.done; if (!done && h.due === day) out.push(h.subject); });
+      (dv.manual || []).forEach((h) => { if (!h.done && h.due === day) out.push(((S.profil.matieres || []).find((m) => m.id === h.mid) || {}).nom || 'Autre'); });
+      return out;
+    };
+    const pretty = (s) => { const x = String(s).toLowerCase(); return x.charAt(0).toUpperCase() + x.slice(1); };
     for (let d = 0; d < 7; d++) {
       const day = addDays(t, d);
-      if (d === 0 && S.profil.lastDay === t) continue; // session déjà faite aujourd'hui
+      const hw = hwFor(addDays(day, 1));
+      const hwTxt = hw.length ? `📝 ${hw.length} devoir${hw.length > 1 ? 's' : ''} pour demain : ${[...new Set(hw.map(pretty))].slice(0, 3).join(', ')}.` : '';
+      if (d === 0 && S.profil.lastDay === t && !hw.length) continue; // session déjà faite aujourd'hui
       const date = new Date(day + 'T12:00:00');
       date.setHours(isNaN(h) ? 18 : h, isNaN(m) ? 0 : m, 0, 0);
       if (date.getTime() <= Date.now() + 60000) continue;
@@ -60,6 +71,10 @@ export async function reschedule(S) {
         const c = soon[0]; const n = diffDays(day, c.ds);
         title = n === 0 ? `🚨 DS aujourd'hui : ${matName(c)}` : n === 1 ? `⏰ DS demain : ${matName(c)}` : `📅 DS dans ${n} jours : ${matName(c)}`;
         body = `Révise « ${c.titre} ». Ta session met l'accent dessus.`;
+      }
+      if (hw.length) {
+        if (d === 0 && S.profil.lastDay === t) { title = '📝 Devoirs pour demain'; body = hwTxt.replace(/^📝 /, ''); }
+        else body = hwTxt + ' ' + body;
       }
       await Notifications.scheduleNotificationAsync({
         content: { title, body, data: { daily: true } },

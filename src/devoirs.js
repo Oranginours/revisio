@@ -6,6 +6,7 @@ import { useApp, Card, H2, Txt, Btn, Row, Label, Input, Err, Dot, toast, ask, pu
 import { uid, dstr, today, addDays, diffDays, fmtDate, parseFr, stripTags } from './logic';
 import { S, commit } from './store';
 import { withSession, matiereFor } from './school';
+import { reschedule } from './notifs';
 
 const D = () => {
   S.devoirs = S.devoirs || {};
@@ -31,7 +32,7 @@ export async function fetchHomework() {
     files: (a.attachments || []).length,
   }));
   S.cache.hwAt = new Date().toISOString();
-  commit();
+  commit(); reschedule(S);
 }
 async function pushDone(id, done) {
   try { if (pronote.assignmentStatus) await withSession((s) => pronote.assignmentStatus(s, id, done)); } catch (e) { /* on garde le choix sur le téléphone */ }
@@ -57,7 +58,7 @@ function toggle(h) {
   const d = D();
   if (h.src === 'moi') { const x = d.manual.find((y) => y.id === h.id); if (x) x.done = !x.done; }
   else { d.doneP[h.id] = !h.done; pushDone(h.id, !h.done); }
-  commit();
+  commit(); reschedule(S);
   if (!h.done) toast('✅ Fait !');
 }
 // Prochain cours d'une matière (d'après l'emploi du temps)
@@ -80,12 +81,12 @@ const dayTitle = (day) => {
 };
 
 /* ---------- Ajouter / modifier ---------- */
-function HomeworkForm({ item }) {
+function HomeworkForm({ item, preset }) {
   const { C, setModal } = useApp();
   const d = D();
-  const [mid, setMid] = useState(item ? item.mid : (S.profil.matieres[0] && S.profil.matieres[0].id) || '');
+  const [mid, setMid] = useState(item ? item.mid : (preset && preset.mid) || (S.profil.matieres[0] && S.profil.matieres[0].id) || '');
   const [text, setText] = useState(item ? item.text : '');
-  const [due, setDue] = useState(item ? item.due : '');
+  const [due, setDue] = useState(item ? item.due : (preset && preset.mid && nextLessonDay(preset.mid)) || '');
   const [typed, setTyped] = useState('');
   const [err, setErr] = useState('');
   const next = mid ? nextLessonDay(mid) : null;
@@ -102,7 +103,7 @@ function HomeworkForm({ item }) {
     if (!day) return setErr('Choisis pour quand.');
     if (item) Object.assign(d.manual.find((x) => x.id === item.id) || {}, { mid, text: text.trim(), due: day });
     else d.manual.push({ id: 'm' + uid(), mid, text: text.trim(), due: day, done: false, created: Date.now() });
-    commit(); setModal(null); toast(item ? 'Devoir modifié' : '📝 Devoir ajouté');
+    commit(); reschedule(S); setModal(null); toast(item ? 'Devoir modifié' : '📝 Devoir ajouté');
   };
   return (
     <View>
@@ -144,7 +145,7 @@ function HomeworkForm({ item }) {
     </View>
   );
 }
-export const openHomeworkForm = (setModal, item) => setModal(<HomeworkForm item={item} />);
+export const openHomeworkForm = (setModal, item, preset) => setModal(<HomeworkForm item={item} preset={preset} />);
 
 /* ---------- Une ligne ---------- */
 function HwRow({ h }) {
@@ -240,7 +241,8 @@ export function HomeworkCard() {
   const { C, go } = useApp();
   const t = today();
   const now = new Date();
-  const day = now.getHours() >= 18 ? addDays(t, 1) : null; // le soir : pour demain
+  if (S.pronote && now.getHours() >= 15) return null; // l'après-midi, la carte « Demain » les montre déjà
+  const day = null;
   const list = allHomework().filter((h) => !h.done && (day ? h.due === day : h.due >= t && h.due <= addDays(t, 1)));
   if (!list.length) return null;
   return (

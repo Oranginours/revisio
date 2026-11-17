@@ -95,7 +95,8 @@ export async function cancelTimer(id) {
 const WAKE = 'reveil';
 async function scheduleWake(S) {
   const c = wakeCfg();
-  if (!c.on || !S.pronote || (!c.notif && !c.depart)) return;
+  const busOn = !!(c.bus && c.bus.on);
+  if ((!c.on && !busOn) || !S.pronote || (!c.notif && !c.depart)) return;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(WAKE, {
       name: 'Réveil', importance: Notifications.AndroidImportance.MAX, sound: 'default', vibrationPattern: [0, 600, 400, 600, 400, 600], enableVibrate: true,
@@ -106,7 +107,7 @@ async function scheduleWake(S) {
     const p = wakePlan(addDays(today(), d));
     if (!p) continue;
     const where = p.lesson.room ? ` en ${p.lesson.room}` : '';
-    if (c.notif && p.wake.getTime() > now + 60000) {
+    if (c.on && c.notif && p.wake.getTime() > now + 60000) {
       await Notifications.scheduleNotificationAsync({
         content: { title: `⏰ Debout ! Il est ${p.label.wake}`, body: `${p.lesson.subject} à ${p.label.start}${where}. Départ à ${p.label.depart}${p.bus ? ` pour le bus de ${p.bus.label.bus}` : ''}.`, data: { daily: true, wake: true }, sound: 'default', priority: 'max' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.wake, channelId: WAKE },

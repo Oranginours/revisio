@@ -565,8 +565,8 @@ export function Settings() {
       </Card>
 
       {!isWeb && <>
-      <Section>RÉVEIL</Section>
-      <WakeSettings onChange={async (k, v) => { if (k === 'on' && v) await askPermission(); reschedule(S); }} />
+      <Section>RÉVEIL & BUS 🚌</Section>
+      <WakeSettings onChange={async (k, v) => { if ((k === 'on' && v) || (k === 'bus' && v && v.on)) await askPermission(); reschedule(S); }} />
 
       <Section>RAPPELS</Section>
       <Card>

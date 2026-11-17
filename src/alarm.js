@@ -42,11 +42,11 @@ export function wakePlan(day) {
   return { day, lesson: l, start, depart, wake, bus: bus && bus.bus ? bus : null, busMiss: !!(bus && bus.tooEarly), label: { start: hm(start), depart: hm(depart), wake: hm(wake) } };
 }
 // Le prochain réveil à venir (dans les 7 jours)
-export function nextWake() {
+export function nextWake(by = 'wake') {
   const now = new Date();
   for (let d = 0; d < 8; d++) {
     const p = wakePlan(addDays(today(), d));
-    if (p && p.wake > now) return p;
+    if (p && p[by] > now) return p;
   }
   return null;
 }
@@ -71,8 +71,9 @@ export function showPhoneAlarms() { try { if (Native) Native.showAlarms(); } cat
 export function WakeCard() {
   const { C, go } = useApp();
   const c = wakeCfg();
-  if (!c.on || !S.pronote) return null;
-  const p = nextWake();
+  if ((!c.on && !(c.bus && c.bus.on)) || !S.pronote) return null;
+  const wakeMode = !!c.on;
+  const p = nextWake(wakeMode ? 'wake' : 'depart');
   if (!p) return null;
   const isTomorrow = p.day === addDays(today(), 1), isToday = p.day === today();
   const done = c.setFor === keyOf(p);
@@ -80,19 +81,19 @@ export function WakeCard() {
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>⏰ RÉVEIL {isToday ? "AUJOURD'HUI" : isTomorrow ? 'DEMAIN' : fmtDate(p.day).toUpperCase()}</Text>
-          <Text style={{ color: C.ink, fontSize: 40, fontWeight: '900', letterSpacing: -1 }}>{p.label.wake}</Text>
-          <Text style={{ color: C.muted, fontSize: 13 }}>🚪 départ {p.label.depart} · 🏫 {p.lesson.subject} à {p.label.start}</Text>
+          <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>{wakeMode ? '⏰ RÉVEIL' : '🚪 DÉPART'} {isToday ? "AUJOURD'HUI" : isTomorrow ? 'DEMAIN' : fmtDate(p.day).toUpperCase()}</Text>
+          <Text style={{ color: C.ink, fontSize: 40, fontWeight: '900', letterSpacing: -1 }}>{wakeMode ? p.label.wake : p.label.depart}</Text>
+          <Text style={{ color: C.muted, fontSize: 13 }}>{wakeMode ? `🚪 départ ${p.label.depart} · ` : ''}🏫 {p.lesson.subject} à {p.label.start}</Text>
           {p.bus && <Text style={{ color: C.priInk, fontSize: 13, fontWeight: '800', marginTop: 2 }}>🚌 Bus de {p.bus.label.bus}{c.bus.ligne ? ` (ligne ${c.bus.ligne})` : ''} → arrivée {p.bus.label.arr}{p.bus.label.prev ? ` · secours : ${p.bus.label.prev}` : ''}</Text>}
         </View>
         <Pressable onPress={() => go({ name: 'settings', back: 'home' })} hitSlop={10}><Text style={{ fontSize: 20 }}>⚙️</Text></Pressable>
       </View>
-      {Platform.OS === 'android' && (
+      {wakeMode && Platform.OS === 'android' && (
         done
           ? <Row style={{ marginTop: 10 }}><Txt muted style={{ flex: 1 }}>✅ Réglé dans l'Horloge</Txt><Btn small kind="ghost" label="Voir" onPress={showPhoneAlarms} /></Row>
           : <Btn label={`Mettre ${p.label.wake} dans l'Horloge`} style={{ marginTop: 12 }} onPress={() => setPhoneAlarm(p)} />
       )}
-      {c.notif && <Txt muted style={{ marginTop: 8, fontSize: 12 }}>Une notification sonnera aussi à {p.label.wake}{c.depart ? `, puis à ${p.label.depart} pour partir` : ''}.</Txt>}
+      {wakeMode && c.notif && <Txt muted style={{ marginTop: 8, fontSize: 12 }}>Une notification sonnera aussi à {p.label.wake}{c.depart ? `, puis à ${p.label.depart} pour partir` : ''}.</Txt>}
     </Card>
   );
 }
@@ -127,6 +128,7 @@ export function WakeSettings({ onChange }) {
         <Switch value={!!c.on} onValueChange={(v) => set('on', v)} trackColor={{ true: C.pri }} />
       </Row>
       {!S.pronote && <Txt muted style={{ marginTop: 6 }}>Connecte Pronote pour que l'appli connaisse ton premier cours.</Txt>}
+      <BusSettings cfg={c} set={set} />
       {c.on && (
         <View>
           {!(c.bus && c.bus.on && c.bus.passages.length) && (
@@ -135,7 +137,6 @@ export function WakeSettings({ onChange }) {
               <Stepper value={c.trajet} onChange={(v) => set('trajet', v)} />
             </View>
           )}
-          <BusSettings cfg={c} set={set} />
           <Label>Préparation (du réveil au départ)</Label>
           <Stepper value={c.prep} onChange={(v) => set('prep', v)} />
           {p ? (

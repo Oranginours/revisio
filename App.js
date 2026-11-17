@@ -88,7 +88,7 @@ export default function App() {
           {!isTop && <Pressable onPress={back} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line }}><Text style={{ fontSize: 20, color: C.ink, fontWeight: '800' }}>‹</Text></Pressable>}
           {title === null ? (
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Image source={require('./assets/logo-mark.png')} style={{ width: 28, height: 32 }} resizeMode="contain" />
+              <LogoMark C={C} />
               <Text style={{ fontSize: 24, fontWeight: '800', letterSpacing: -1, color: C.ink }}>révisio</Text>
             </View>
           ) : <Text numberOfLines={1} style={{ flex: 1, fontSize: isTop ? 26 : 20, fontWeight: '900', letterSpacing: -0.6, color: C.ink }}>{title}</Text>}
@@ -101,18 +101,20 @@ export default function App() {
           <Guard key={v.name + (v.id || '') + (v.tool || '')} C={C} onHome={() => setView({ name: 'home' })}>{screen}</Guard>
         </ScrollView>
         {isTop && (
-          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: C.line, backgroundColor: C.card, paddingTop: 6, paddingBottom: Platform.OS === 'android' ? 24 : 28 }}>
-            {NAV.map(([k, icon, label]) => {
-              const on = v.name === k;
-              return (
-                <Pressable key={k} onPress={() => go({ name: k })} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                  <View style={{ paddingHorizontal: 18, paddingVertical: 4, borderRadius: 99, backgroundColor: on ? C.priSoft : 'transparent' }}>
-                    <Text style={{ fontSize: 20, opacity: on ? 1 : 0.55 }}>{icon}</Text>
-                  </View>
-                  <Text style={{ fontSize: 11, marginTop: 2, color: on ? C.priInk : C.muted, fontWeight: on ? '800' : '500' }}>{label}</Text>
-                </Pressable>
-              );
-            })}
+          <View style={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: Platform.OS === 'android' ? 18 : isWeb ? 10 : 24, backgroundColor: C.bg }}>
+            <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 26, padding: 6, borderWidth: 1, borderColor: C.line,
+              shadowColor: '#000', shadowOpacity: C.dark ? 0.4 : 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 10 }}>
+              {NAV.map(([k, icon, label]) => {
+                const on = v.name === k;
+                return (
+                  <Pressable key={k} onPress={() => go({ name: k })}
+                    style={({ pressed }) => ({ flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 20, backgroundColor: on ? C.priSoft : 'transparent', transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+                    <Text style={{ fontSize: 21, opacity: on ? 1 : 0.5 }}>{icon}</Text>
+                    <Text numberOfLines={1} style={{ fontSize: 10.5, marginTop: 2, color: on ? C.priInk : C.muted, fontWeight: on ? '800' : '600' }}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -169,4 +171,16 @@ class Guard extends React.Component {
       </View>
     );
   }
+}
+
+// Logo dessiné (pas d'image à charger : il s'affiche toujours)
+function LogoMark({ C }) {
+  return (
+    <View style={{ width: 30, height: 32 }}>
+      <View style={{ position: 'absolute', right: 0, top: 0, width: 20, height: 26, borderRadius: 6, backgroundColor: '#C7D2FE' }} />
+      <View style={{ position: 'absolute', left: 0, bottom: 0, width: 21, height: 26, borderRadius: 6, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.bg }}>
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900', marginTop: -1 }}>✓</Text>
+      </View>
+    </View>
+  );
 }

@@ -108,13 +108,13 @@ async function scheduleWake(S) {
     const where = p.lesson.room ? ` en ${p.lesson.room}` : '';
     if (c.notif && p.wake.getTime() > now + 60000) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: `⏰ Debout ! Il est ${p.label.wake}`, body: `${p.lesson.subject} à ${p.label.start}${where}. Départ à ${p.label.depart}.`, data: { daily: true, wake: true }, sound: 'default', priority: 'max' },
+        content: { title: `⏰ Debout ! Il est ${p.label.wake}`, body: `${p.lesson.subject} à ${p.label.start}${where}. Départ à ${p.label.depart}${p.bus ? ` pour le bus de ${p.bus.label.bus}` : ''}.`, data: { daily: true, wake: true }, sound: 'default', priority: 'max' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.wake, channelId: WAKE },
       });
     }
     if (c.depart && p.depart.getTime() > now + 60000) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "🚌 C'est l'heure de partir !", body: `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
+        content: { title: "🚌 C'est l'heure de partir !", body: p.bus ? `Bus de ${p.bus.label.bus} (arrivée ${p.bus.label.arr}) · ${p.lesson.subject} à ${p.label.start}${where}.` : `${p.lesson.subject} à ${p.label.start}${where}.`, data: { daily: true, wake: true }, sound: 'default' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.depart, channelId: WAKE },
       });
     }

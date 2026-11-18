@@ -15,7 +15,7 @@ import { tipOfDay } from './tools';
 import { levelInfo, levelTitle, sessionDone } from './progress';
 import { WakeCard, WakeSettings } from './alarm';
 import { HomeworkCard } from './devoirs';
-import { TomorrowCard } from './tomorrow';
+import { TomorrowCard, openBagEditor } from './tomorrow';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -512,6 +512,7 @@ export function Settings() {
         <Label>Objectif par jour</Label>
         <Seg options={[[10, '10'], [15, '15'], [20, '20'], [30, '30']]} value={st.goal || 15} onChange={(v) => { set('goal', v); toast(`Objectif : ${v} questions par jour 🎯`); }} />
         <Txt muted style={{ marginTop: 8 }}>Questions dans ta session du jour (+5 quand un DS est dans 3 jours ou moins).</Txt>
+        <Btn kind="sec" label={`🎒 Mes classeurs et cahiers${(S.profil.sac || []).length ? ` (${S.profil.sac.length})` : ''}`} style={{ marginTop: 14 }} onPress={() => openBagEditor(setModal)} />
       </Card>
 
       <Section>APPARENCE</Section>

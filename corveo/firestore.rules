@@ -13,8 +13,11 @@ service cloud.firestore {
     // Profils : chacun modifie le sien ; un parent modifie les membres de sa famille ; l'admin modifie tout.
     match /users/{uid} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.role == '' && request.resource.data.familyId == '';
+      allow create: if (signedIn() && request.auth.uid == uid
+        && request.resource.data.role == '' && request.resource.data.familyId == '')
+        // profil sans téléphone créé par un parent de la famille
+        || (request.resource.data.get('managed', false) == true && request.resource.data.role == 'enfant'
+            && isParent(request.resource.data.familyId));
       allow update: if isAdmin() || (signedIn() && sameBan() && (
         (request.auth.uid == uid && (
           request.resource.data.role == resource.data.role
@@ -23,7 +26,8 @@ service cloud.firestore {
         ))
         || isParent(resource.data.familyId)
       ));
-      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid)
+        || (resource.data.get('managed', false) == true && isParent(resource.data.familyId));
     }
 
     // Codes pour rejoindre une famille

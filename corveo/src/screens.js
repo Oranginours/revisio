@@ -141,7 +141,7 @@ export function NoFamily({ me, reload, admin }) {
 const DAYS = ['', 'dernier jour !', '2 jours', '3 jours', '4 jours', '5 jours', '6 jours', '7 jours'];
 
 export function WeekScreen() {
-  const { me, fam, members, week, tasks, refresh, setWeek, isParent, setModal } = useCtx();
+  const { actor: me, fam, members, week, tasks, refresh, setWeek, isParent, setModal } = useCtx();
   const [pop, setPop] = useState(0);
   if (!tasks.length) {
     return (
@@ -152,7 +152,7 @@ export function WeekScreen() {
     );
   }
   if (!week) return <ActivityIndicator color={C.green} style={{ marginTop: 40 }} />;
-  const uid = currentUid();
+  const uid = me.id;
   const mine = (week.assign && week.assign[uid]) || [];
   const fs = D.familyStats(week), ms = D.stats(week, uid);
   const extra = (week.extra && week.extra[uid]) || 0;
@@ -239,9 +239,9 @@ export function TaskRow({ t, status, notes, onPress, onCheck, extra, who }) {
 
 // Les tâches des autres : on voit qui fait quoi, ce qui est en cours, et les notes
 function Others({ members, week }) {
-  const { setModal } = useCtx();
+  const { setModal, actor } = useCtx();
   const [open, setOpen] = useState(null);
-  const list = members.filter((m) => week.assign && week.assign[m.id] && m.id !== currentUid());
+  const list = members.filter((m) => week.assign && week.assign[m.id] && m.id !== actor.id);
   if (!list.length) return null;
   return (
     <View style={{ marginTop: 16 }}>
@@ -278,7 +278,7 @@ function Others({ members, week }) {
 
 // Fiche d'une tâche : statut (à faire / en cours / faite) et notes visibles par tous
 export function TaskSheet({ uid, i }) {
-  const { me, fam, week, setWeek, members, tasks, isParent, setModal, refresh } = useCtx();
+  const { actor: me, fam, week, setWeek, members, tasks, isParent, setModal, refresh } = useCtx();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   if (!week || !week.assign || !week.assign[uid] || !week.assign[uid][i]) return <Txt muted>Cette tâche n'existe plus.</Txt>;
@@ -418,19 +418,20 @@ export function FamilyScreen() {
           <Avatar m={m} />
           <View style={{ flex: 1 }}>
             <Text style={{ color: C.ink, fontWeight: '800', fontSize: 16 }}>{m.name}{m.id === currentUid() ? ' (toi)' : ''}</Text>
-            <Txt muted style={{ fontSize: 13 }}>@{m.username}{m.active === false ? ' · ne participe pas' : ''}</Txt>
+            <Txt muted style={{ fontSize: 13 }}>{m.managed ? '📵 sans téléphone' : '@' + m.username}{m.active === false ? ' · ne participe pas' : ''}</Txt>
           </View>
           <Chip color={m.role === 'parent' ? '#1E3A5F' : C.card2} ink={m.role === 'parent' ? C.blue : C.ink}>{m.role === 'parent' ? '👑 Parent' : 'Enfant'}</Chip>
           {isParent && <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>}
         </Pressable>
       ))}
-      {isParent && <Txt muted style={{ fontSize: 12, marginTop: 4 }}>Touche un membre pour le passer parent, valider ses tâches ou lui en donner une en plus.</Txt>}
+      {isParent && <Btn kind="sec" label="📵 Ajouter un enfant sans téléphone" style={{ marginTop: 6 }} onPress={() => setModal(<ManagedForm />)} />}
+      {isParent && <Txt muted style={{ fontSize: 12, marginTop: 8 }}>Touche un membre pour le passer parent, valider ses tâches ou lui en donner une en plus. Les profils sans téléphone s'utilisent depuis ton appli : touche ton avatar en haut pour changer de profil.</Txt>}
     </View>
   );
 }
 
 function MemberSheet({ m }) {
-  const { fam, week, tasks, setModal, refresh } = useCtx();
+  const { fam, week, tasks, setModal, refresh, actAs, actor } = useCtx();
   const [busy, setBusy] = useState(false);
   const run = async (fn, msg) => { setBusy(true); try { await fn(); await refresh(true); if (msg) toast(msg); setModal(null); } catch (e) { toast(e.message, 'bad'); } setBusy(false); };
   const list = (week && week.assign && week.assign[m.id]) || [];
@@ -470,18 +471,26 @@ function MemberSheet({ m }) {
           </View>
         ) : <Btn kind="sec" small label="➕ Lui donner une tâche en plus" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => setGive(true)} />
       )}
-      <Label>Rôle</Label>
-      <Row>
+      {m.managed && (
+        <View>
+          <Btn label={`📵 Utiliser le profil de ${m.name}`} style={{ marginTop: 12 }} onPress={() => { actAs(m.id); setModal(null); }} />
+          <Btn kind="sec" small label="✏️ Modifier le nom et l'avatar" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => setModal(<ManagedForm m={m} />)} />
+        </View>
+      )}
+      {!m.managed && <Label>Rôle</Label>}
+      {!m.managed && <Row>
         {['parent', 'enfant'].map((r) => (
           <Btn key={r} small kind={m.role === r ? 'pri' : 'sec'} label={r === 'parent' ? '👑 Parent' : '🧒 Enfant'} disabled={busy || (self && r === 'enfant')}
             onPress={() => m.role !== r && run(() => D.setMember(m.id, { role: r }), `${m.name} est maintenant ${r}`)} />
         ))}
-      </Row>
+      </Row>}
       <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 14 }}>
         <Txt style={{ flex: 1 }}>Participe aux tâches</Txt>
         <Switch value={m.active !== false} onValueChange={(v) => run(() => D.setMember(m.id, { active: v }), v ? 'Participe à partir de la prochaine répartition' : 'Ne recevra plus de tâches')} trackColor={{ true: C.green }} />
       </Row>
-      {!self && m.id !== fam.owner && <Btn kind="danger" small label="Retirer de la famille" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+      {m.managed && <Btn kind="danger" small label="🗑️ Supprimer ce profil" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+        onPress={() => ask('Supprimer ce profil ?', `Le profil de ${m.name} sera effacé.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => run(async () => { await D.deleteManaged(m.id); if (actor.id === m.id) actAs(null); }, 'Profil supprimé') }])} />}
+      {!self && !m.managed && m.id !== fam.owner && <Btn kind="danger" small label="Retirer de la famille" style={{ marginTop: 16, alignSelf: 'flex-start' }}
         onPress={() => ask('Retirer ?', `${m.name} ne fera plus partie de la famille.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => run(() => D.setMember(m.id, { familyId: '', role: '' }), 'Membre retiré') }])} />}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 14 }} onPress={() => setModal(null)} />
     </View>
@@ -637,5 +646,71 @@ function DeleteAccount({ me, after }) {
         <Btn kind="ghost" label="Annuler" onPress={() => { setOpen(false); setPass(''); setErr(''); }} />
       </Row>
     </Card>
+  );
+}
+
+/* ---------- Profils sans téléphone ---------- */
+function ManagedForm({ m }) {
+  const { fam, setModal, refresh, actAs } = useCtx();
+  const [name, setName] = useState(m ? m.name : '');
+  const [avatar, setAvatar] = useState(m ? m.avatar : D.AVATARS[Math.floor(Math.random() * D.AVATARS.length)]);
+  const [color, setColor] = useState(m ? m.color : D.COLORS[Math.floor(Math.random() * 8)]);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!name.trim()) return setErr('Écris son prénom.');
+    setBusy(true);
+    try {
+      if (m) await D.updateManaged(m.id, { name: name.trim(), avatar, color });
+      else await D.createManaged(fam.id, { name, avatar, color });
+      await refresh(true); setModal(null);
+      toast(m ? 'Profil modifié' : `📵 Profil de ${name.trim()} créé : il aura ses tâches à la prochaine répartition`);
+    } catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <View>
+      <H2>{m ? 'Modifier le profil' : 'Enfant sans téléphone'}</H2>
+      {!m && <Txt muted>Il n'a pas de compte : c'est toi qui coches ses tâches depuis ton appli, en changeant de profil.</Txt>}
+      <Label>Prénom</Label>
+      <Input value={name} onChangeText={setName} placeholder="ex. Léo" autoFocus={!m} />
+      <Label>Avatar</Label>
+      <AvatarPicker avatar={avatar} color={color} setAvatar={setAvatar} setColor={setColor} />
+      <Err>{err}</Err>
+      <Row style={{ marginTop: 16 }}>
+        <Btn label={m ? 'Enregistrer' : 'Créer le profil'} onPress={save} disabled={busy} />
+        <Btn kind="ghost" label="Annuler" onPress={() => setModal(null)} />
+      </Row>
+    </View>
+  );
+}
+
+// Changer de profil (moi ↔ enfants sans téléphone)
+export function Switcher() {
+  const { me, actor, actAs, members, week, isParent, setModal } = useCtx();
+  const managed = isParent ? members.filter((m) => m.managed) : [];
+  const Item = ({ m, label }) => {
+    const on = actor.id === m.id;
+    const st = week ? D.stats(week, m.id) : null;
+    return (
+      <Pressable onPress={() => { actAs(m.id === me.id ? null : m.id); setModal(null); }}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, marginBottom: 8, backgroundColor: on ? C.card2 : C.bg, borderWidth: 2, borderColor: on ? C.green : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+        <Avatar m={m} size={46} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: C.ink, fontWeight: '900', fontSize: 16 }}>{m.name}</Text>
+          <Txt muted style={{ fontSize: 13 }}>{label}{st && st.total ? ` · ${st.done}/${st.total} tâches` : ''}</Txt>
+        </View>
+        {on && <Text style={{ color: C.green, fontWeight: '900' }}>✓</Text>}
+      </Pressable>
+    );
+  };
+  return (
+    <View>
+      <H2>Changer de profil</H2>
+      <Item m={me} label={`Moi · @${me.username}`} />
+      {managed.map((m) => <Item key={m.id} m={m} label="📵 sans téléphone" />)}
+      {isParent && <Btn kind="sec" label="＋ Ajouter un enfant sans téléphone" style={{ marginTop: 6 }} onPress={() => setModal(<ManagedForm />)} />}
+      {!isParent && <Txt muted style={{ marginTop: 6 }}>Seuls les parents peuvent utiliser les profils sans téléphone.</Txt>}
+      <Btn kind="ghost" label="Fermer" style={{ marginTop: 10 }} onPress={() => setModal(null)} />
+    </View>
   );
 }

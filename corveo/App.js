@@ -8,6 +8,9 @@ import { loadAuth, currentUid, signOut } from './src/fb';
 import * as D from './src/data';
 import { Ctx, AuthScreen, NoFamily, WeekScreen, FamilyScreen, TasksScreen, ProfileScreen } from './src/screens';
 import { AdminScreen } from './src/admin';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Avatar } from './src/ui';
+import { Switcher } from './src/screens';
 
 const TABS = [['week', '✅', 'Mes tâches'], ['family', '👨‍👩‍👧', 'Famille'], ['tasks', '📋', 'Tâches'], ['me', '🙂', 'Moi']];
 
@@ -22,6 +25,9 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [pulling, setPulling] = useState(false);
   const famRef = useRef(null);
+  const [actingId, setActingId] = useState(null); // profil sans téléphone utilisé par un parent
+  useEffect(() => { AsyncStorage.getItem('corveo_acting').then((v) => v && setActingId(v)).catch(() => {}); }, []);
+  const actAs = (id) => { setActingId(id); setTab('week'); AsyncStorage.setItem('corveo_acting', id || '').catch(() => {}); };
 
   // Charge tout : profil, famille, membres, tâches, semaine
   const loadAll = useCallback(async () => {
@@ -68,7 +74,7 @@ export default function App() {
     return () => { clearInterval(id); sub.remove(); };
   }, [phase]);
 
-  const logout = async () => { await signOut(); setMe(null); setFam(null); famRef.current = null; setTab('week'); setPhase('auth'); };
+  const logout = async () => { actAs(null); await signOut(); setMe(null); setFam(null); famRef.current = null; setTab('week'); setPhase('auth'); };
   const isParent = !!(me && me.role === 'parent');
   const topPad = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) + 8 : isWeb ? 16 : 54;
 
@@ -110,8 +116,11 @@ export default function App() {
   const AdminTab = () => <AdminScreen reload={loadAll} />;
   const Screen = { week: WeekScreen, family: FamilyScreen, tasks: TasksScreen, me: ProfileScreen, admin: AdminTab }[tab] || WeekScreen;
   const titles = { week: 'Mes tâches', family: 'Famille', tasks: 'Tâches', me: 'Moi', admin: 'Admin' };
-  const ctx = { me, fam, members, tasks, week, setWeek, refresh, isParent, setModal, logout };
-  const myStats = week ? D.stats(week, currentUid()) : { done: 0, total: 0 };
+  const managedSel = isParent && actingId ? members.find((m) => m.id === actingId && m.managed) : null;
+  const actor = managedSel || me;
+  const ctx = { me, actor, actAs, fam, members, tasks, week, setWeek, refresh, isParent, setModal, logout };
+  const myStats = week ? D.stats(week, actor.id) : { done: 0, total: 0 };
+  const hasManaged = isParent && members.some((m) => m.managed);
   const left = myStats.total - myStats.done;
 
   return (
@@ -120,8 +129,17 @@ export default function App() {
         <StatusBar style="light" />
         <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', maxWidth: 640, width: '100%', alignSelf: 'center' }}>
           <H1 style={{ flex: 1 }}>{titles[tab]}</H1>
-          <Text style={{ color: C.muted, fontWeight: '800' }}>{fam.name}</Text>
+          <Pressable onPress={() => setModal(<Switcher />)} hitSlop={8} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+            {hasManaged && <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12 }}>⇄</Text>}
+            <Avatar m={actor} size={38} />
+          </Pressable>
         </View>
+        {managedSel && (
+          <Pressable onPress={() => actAs(null)} style={{ marginHorizontal: 16, marginBottom: 4, backgroundColor: '#2E1065', borderRadius: 14, paddingVertical: 9, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 608, width: '92%', alignSelf: 'center' }}>
+            <Text style={{ color: '#E9D5FF', fontWeight: '800', flex: 1 }}>📵 Profil de {managedSel.name}</Text>
+            <Text style={{ color: '#C4B5FD', fontWeight: '900' }}>Revenir à moi ›</Text>
+          </Pressable>
+        )}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={pulling} tintColor={C.green} colors={[C.green]} onRefresh={async () => { setPulling(true); await refresh(true); setPulling(false); }} />}>
           <Screen />

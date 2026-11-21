@@ -46,7 +46,7 @@ export function AdminScreen({ reload }) {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 12, marginBottom: open === u.id ? 0 : 8, borderWidth: 1, borderColor: open === u.id ? '#7C3AED' : C.line }}>
             <Avatar m={u} size={38} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: C.ink, fontWeight: '800' }}>{u.name} <Text style={{ color: C.muted, fontWeight: '600' }}>@{u.username}</Text></Text>
+              <Text style={{ color: C.ink, fontWeight: '800' }}>{u.name} <Text style={{ color: C.muted, fontWeight: '600' }}>{u.managed ? '📵 sans téléphone' : '@' + u.username}</Text></Text>
               <Txt muted style={{ fontSize: 12 }}>{u.familyId ? `${famName(u.familyId)} · ${u.role || '?'}` : 'Sans famille'}{u.banned ? ' · 🚫 bloqué' : ''}</Txt>
             </View>
             {D.isAdminUser(u) && <Chip color="#2E1065" ink="#C4B5FD">admin</Chip>}

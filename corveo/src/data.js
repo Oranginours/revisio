@@ -222,3 +222,12 @@ export async function deleteFamily(fam, members) {
   if (fam.code) await deleteDoc(`codes/${fam.code}`).catch(() => {});
   await deleteDoc(`families/${fam.id}`);
 }
+
+/* ---------- Profils sans téléphone (gérés par un parent) ---------- */
+export async function createManaged(fid, { name, avatar, color }) {
+  const id = 'p' + newId(19);
+  await setDoc(`users/${id}`, { username: '', name: name.trim(), avatar, color, familyId: fid, role: 'enfant', active: true, managed: true, managedBy: currentUid(), created: Date.now() });
+  return id;
+}
+export const updateManaged = (id, patch) => updateDoc(`users/${id}`, patch);
+export const deleteManaged = (id) => deleteDoc(`users/${id}`);

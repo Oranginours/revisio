@@ -6,3 +6,6 @@ export const FIREBASE = {
   projectId: 'corveo-b9a16',
 };
 export const configured = () => !!(FIREBASE.apiKey && FIREBASE.projectId);
+
+// Comptes administrateurs de l'appli (pseudos). Doit correspondre à isAdmin() dans firestore.rules.
+export const ADMINS = ['gael'];

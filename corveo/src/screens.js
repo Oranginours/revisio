@@ -96,7 +96,7 @@ function AvatarPicker({ avatar, color, setAvatar, setColor }) {
 /* =========================================================
    Pas encore de famille
    ========================================================= */
-export function NoFamily({ me, reload }) {
+export function NoFamily({ me, reload, admin }) {
   const [name, setName] = useState(me.name ? `Famille de ${me.name}` : '');
   const [defaults, setDefaults] = useState(true);
   const [code, setCode] = useState('');
@@ -129,6 +129,8 @@ export function NoFamily({ me, reload }) {
       {busy && <ActivityIndicator color={C.green} />}
       <Err>{err}</Err>
       <Btn kind="ghost" label="Se déconnecter" style={{ marginTop: 20 }} onPress={async () => { await signOut(); await reload(); }} />
+      <DeleteAccount me={me} after={reload} />
+      {admin && <View style={{ marginTop: 24 }}>{admin}</View>}
     </ScrollView>
   );
 }
@@ -604,8 +606,36 @@ export function ProfileScreen() {
         <Btn label="Enregistrer" style={{ marginTop: 14 }} onPress={save} />
       </Card>
       <Btn kind="sec" label="Se déconnecter" onPress={logout} />
+      <DeleteAccount me={me} after={logout} />
       {fam.owner !== me.id && <Btn kind="danger" label="Quitter la famille" style={{ marginTop: 10 }}
         onPress={() => ask('Quitter la famille ?', 'Tu pourras la rejoindre à nouveau avec le code.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Quitter', style: 'destructive', onPress: async () => { await D.leaveFamily(); await refresh(true); } }])} />}
     </View>
+  );
+}
+
+/* ---------- Supprimer mon compte ---------- */
+function DeleteAccount({ me, after }) {
+  const [open, setOpen] = useState(false);
+  const [pass, setPass] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!open) return <Btn kind="ghost" small label="Supprimer mon compte" style={{ marginTop: 18, alignSelf: 'center' }} onPress={() => setOpen(true)} />;
+  const go = async () => {
+    setErr(''); setBusy(true);
+    try { await D.deleteMyAccount(me, pass); toast('Compte supprimé'); await after(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <Card style={{ marginTop: 18, borderColor: '#7F1D1D' }}>
+      <H2>Supprimer mon compte</H2>
+      <Txt muted>Ton pseudo @{me.username}, ton profil et tes réglages seront effacés. Tu pourras recréer un compte avec le même pseudo.</Txt>
+      <Label>Ton mot de passe pour confirmer</Label>
+      <Input value={pass} onChangeText={setPass} secureTextEntry />
+      <Err>{err}</Err>
+      <Row style={{ marginTop: 12 }}>
+        <Btn kind="danger" label={busy ? '…' : 'Supprimer définitivement'} disabled={busy || pass.length < 6} onPress={go} />
+        <Btn kind="ghost" label="Annuler" onPress={() => { setOpen(false); setPass(''); setErr(''); }} />
+      </Row>
+    </Card>
   );
 }

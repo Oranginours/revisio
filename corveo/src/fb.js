@@ -17,6 +17,7 @@ const MSG = {
   USER_DISABLED: 'Ce compte est désactivé.',
   TOO_MANY_ATTEMPTS_TRY_LATER: 'Trop d’essais. Réessaie dans quelques minutes.',
   OPERATION_NOT_ALLOWED: 'Les comptes par mot de passe ne sont pas activés dans Firebase (Authentication → Email/Password).',
+  CREDENTIAL_TOO_OLD_LOGIN_AGAIN: 'Reconnecte-toi puis recommence.',
   CONFIGURATION_NOT_FOUND: 'Authentication n’est pas activé dans Firebase.',
   PERMISSION_DENIED: 'Accès refusé (règles Firestore).',
 };
@@ -50,6 +51,7 @@ export async function loadAuth() {
   return auth;
 }
 export const currentUid = () => (auth ? auth.uid : null);
+export const currentUser = () => (auth ? auth.user || '' : '');
 export async function signOut() { auth = null; await AsyncStorage.removeItem(KEY); }
 
 function fromSignIn(j) {
@@ -60,7 +62,7 @@ export async function signUp(username, password) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: username + EMAIL_DOMAIN, password, returnSecureToken: true }),
   });
-  await saveAuth(fromSignIn(j));
+  await saveAuth({ ...fromSignIn(j), user: username });
   return auth.uid;
 }
 export async function signIn(username, password) {
@@ -68,7 +70,7 @@ export async function signIn(username, password) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: username + EMAIL_DOMAIN, password, returnSecureToken: true }),
   });
-  await saveAuth(fromSignIn(j));
+  await saveAuth({ ...fromSignIn(j), user: username });
   return auth.uid;
 }
 export async function deleteAccount() {
@@ -88,7 +90,7 @@ async function token() {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(auth.refreshToken)}`,
       });
-      await saveAuth({ idToken: j.id_token, refreshToken: j.refresh_token, uid: j.user_id, exp: Date.now() + (Number(j.expires_in || 3600) - 120) * 1000 });
+      await saveAuth({ user: auth.user, idToken: j.id_token, refreshToken: j.refresh_token, uid: j.user_id, exp: Date.now() + (Number(j.expires_in || 3600) - 120) * 1000 });
     })().finally(() => { refreshing = null; });
   }
   await refreshing;

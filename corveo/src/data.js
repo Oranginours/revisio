@@ -1,5 +1,6 @@
 // Logique de Corvéo : familles, tâches, semaines, répartition équitable et tâches en plus.
-import { getDoc, listDocs, setDoc, updateDoc, deleteDoc, queryEq, newId, currentUid, signUp, signIn, normUser } from './fb';
+import { getDoc, listDocs, setDoc, updateDoc, deleteDoc, queryEq, newId, currentUid, currentUser, signUp, signIn, normUser, deleteAccount } from './fb';
+import { ADMINS } from './config';
 
 /* ---------- Semaines (lundi → dimanche) ---------- */
 export function weekId(date = new Date()) {
@@ -190,4 +191,34 @@ export const statusOf = (week, key) => (week && week.done && week.done[key] ? 'd
 export async function giveTask(fid, week, uid, task) {
   const list = ((week.assign || {})[uid] || []).concat([{ t: task.id, n: task.title, e: task.emoji }]);
   return updateDoc(`families/${fid}/weeks/${weekId()}`, { ['assign.' + uid]: list });
+}
+
+/* ---------- Compte : suppression ---------- */
+// Supprime mon profil puis mon compte (le mot de passe est redemandé par sécurité)
+export async function deleteMyAccount(me, password) {
+  await signIn(me.username, password);
+  try { await deleteDoc(`users/${currentUid()}`); } catch (e) { /* déjà parti */ }
+  await deleteAccount();
+}
+// Profil manquant (supprimé par l'admin) : on en recrée un vide
+export async function recreateProfile() {
+  const u = currentUser() || 'joueur';
+  await setDoc(`users/${currentUid()}`, { username: u, name: u, avatar: '🙂', color: '#3B82F6', familyId: '', role: '', active: true, created: Date.now() });
+  return getMe();
+}
+
+/* ---------- Admin ---------- */
+export const isAdminUser = (me) => !!(me && ADMINS.includes(me.username));
+export const allUsers = async () => (await listDocs('users')).sort((a, b) => String(a.username).localeCompare(String(b.username)));
+export const allFamilies = async () => (await listDocs('families')).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+export const adminUpdateUser = (uid, patch) => updateDoc(`users/${uid}`, patch);
+export const adminDeleteUser = (uid) => deleteDoc(`users/${uid}`);
+export async function deleteFamily(fam, members) {
+  for (const m of members) { try { await updateDoc(`users/${m.id}`, { familyId: '', role: '' }); } catch (e) { /* ignoré */ } }
+  for (const sub of ['tasks', 'weeks']) {
+    const docs = await listDocs(`families/${fam.id}/${sub}`).catch(() => []);
+    for (const d of docs) await deleteDoc(`families/${fam.id}/${sub}/${d.id}`).catch(() => {});
+  }
+  if (fam.code) await deleteDoc(`codes/${fam.code}`).catch(() => {});
+  await deleteDoc(`families/${fam.id}`);
 }

@@ -7,6 +7,7 @@ import { configured } from './src/config';
 import { loadAuth, currentUid, signOut } from './src/fb';
 import * as D from './src/data';
 import { Ctx, AuthScreen, NoFamily, WeekScreen, FamilyScreen, TasksScreen, ProfileScreen } from './src/screens';
+import { AdminScreen } from './src/admin';
 
 const TABS = [['week', '✅', 'Mes tâches'], ['family', '👨‍👩‍👧', 'Famille'], ['tasks', '📋', 'Tâches'], ['me', '🙂', 'Moi']];
 
@@ -32,8 +33,11 @@ export default function App() {
       if (e.status === 401 || e.status === 400) { await signOut(); setPhase('auth'); return; }
       toast(e.message, 'bad'); setPhase((p) => (p === 'load' ? 'offline' : p)); return;
     }
-    if (!u) { await signOut(); setPhase('auth'); return; }
+    if (!u) { // profil effacé par l'admin : on repart d'un profil vide
+      try { u = await D.recreateProfile(); } catch (e) { await signOut(); setPhase('auth'); return; }
+    }
     setMe(u);
+    if (u.banned) { setPhase('banned'); return; }
     if (!u.familyId) { setPhase('nofamily'); return; }
     const [f, ms, ts] = await Promise.all([D.getFamily(u.familyId), D.getMembers(u.familyId), D.getTasks(u.familyId)]);
     if (!f) { await D.leaveFamily(); setPhase('nofamily'); return; }
@@ -88,11 +92,24 @@ export default function App() {
     </View>
   );
   if (phase === 'auth') return <View style={{ flex: 1, backgroundColor: C.bg }}><AuthScreen onDone={loadAll} /><ToastHost /><StatusBar style="light" /></View>;
-  if (phase === 'nofamily') return <View style={{ flex: 1, backgroundColor: C.bg }}><NoFamily me={me} reload={loadAll} /><ToastHost /><StatusBar style="light" /></View>;
+  if (phase === 'nofamily') return <View style={{ flex: 1, backgroundColor: C.bg }}><NoFamily me={me} reload={loadAll} admin={D.isAdminUser(me) ? <AdminScreen reload={loadAll} /> : null} /><ToastHost /><StatusBar style="light" /></View>;
+  if (phase === 'banned') return (
+    <View style={{ flex: 1, backgroundColor: C.bg, padding: 24, paddingTop: topPad + 40, alignItems: 'center' }}>
+      <Text style={{ fontSize: 48 }}>🚫</Text>
+      <H1 style={{ marginTop: 10 }}>Compte bloqué</H1>
+      <Txt muted center style={{ marginTop: 8 }}>Ce compte a été bloqué par l'administrateur.</Txt>
+      <Pressable onPress={logout} style={{ marginTop: 20, backgroundColor: C.card2, paddingHorizontal: 22, paddingVertical: 13, borderRadius: 16 }}>
+        <Text style={{ fontWeight: '900', color: C.ink }}>Se déconnecter</Text>
+      </Pressable>
+      <StatusBar style="light" />
+    </View>
+  );
 
-  const tabs = TABS;
-  const Screen = { week: WeekScreen, family: FamilyScreen, tasks: TasksScreen, me: ProfileScreen }[tab];
-  const titles = { week: 'Mes tâches', family: 'Famille', tasks: 'Tâches', me: 'Moi' };
+  const admin = D.isAdminUser(me);
+  const tabs = admin ? [...TABS, ['admin', '🛡️', 'Admin']] : TABS;
+  const AdminTab = () => <AdminScreen reload={loadAll} />;
+  const Screen = { week: WeekScreen, family: FamilyScreen, tasks: TasksScreen, me: ProfileScreen, admin: AdminTab }[tab] || WeekScreen;
+  const titles = { week: 'Mes tâches', family: 'Famille', tasks: 'Tâches', me: 'Moi', admin: 'Admin' };
   const ctx = { me, fam, members, tasks, week, setWeek, refresh, isParent, setModal, logout };
   const myStats = week ? D.stats(week, currentUid()) : { done: 0, total: 0 };
   const left = myStats.total - myStats.done;

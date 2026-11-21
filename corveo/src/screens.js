@@ -549,10 +549,31 @@ export function TasksScreen() {
   );
 }
 
-const EMOJIS = ['🍽️', '🧽', '🗑️', '🧹', '🛏️', '🧺', '👕', '🍴', '🧼', '🚽', '🪴', '🛒', '🐶', '🐱', '🚗', '🪟', '🍳', '♻️', '📦', '🧸', '🛁', '🌿', '❄️', '✨'];
+const EMOJIS = ['🍽️', '🧽', '🗑️', '🧹', '🛏️', '🧺', '👕', '🍴', '🧼', '🚽', '🪴', '🛒', '🐶', '🐱', '🚗', '🪟', '🍳', '♻️', '📦', '🧸', '🛁', '🌿', '❄️', '✨',
+  '🐟', '🐹', '🐰', '🍂', '🌱', '🚲', '🧴', '🪣', '🧻', '🥕', '🍞', '🥛', '📚', '🎒', '💡', '🔌', '🧊', '🥾'];
+// Garde un seul emoji (le premier « caractère visible », même les emojis composés comme 👨‍🍳)
+function firstEmoji(txt) {
+  const t = String(txt || '').trim();
+  if (!t) return '';
+  try { if (typeof Intl !== 'undefined' && Intl.Segmenter) { const it = new Intl.Segmenter('fr', { granularity: 'grapheme' }).segment(t)[Symbol.iterator]().next(); if (!it.done) return it.value.segment; } } catch (e) { /* pas de Segmenter */ }
+  // sans Segmenter : on assemble à la main (variantes, couleurs de peau, emojis liés par ZWJ, drapeaux)
+  const cps = Array.from(t);
+  let out = cps[0], i = 1;
+  const cp = (c) => c.codePointAt(0);
+  const isRI = (c) => c && cp(c) >= 0x1f1e6 && cp(c) <= 0x1f1ff;
+  if (isRI(cps[0]) && isRI(cps[1])) return cps[0] + cps[1];
+  while (i < cps.length) {
+    const c = cps[i], n = cp(c);
+    if (n === 0xfe0f || n === 0x20e3 || (n >= 0x1f3fb && n <= 0x1f3ff)) { out += c; i++; }
+    else if (n === 0x200d && cps[i + 1]) { out += c + cps[i + 1]; i += 2; }
+    else break;
+  }
+  return out;
+}
 function TaskForm({ t }) {
   const { fam, setModal, refresh } = useCtx();
   const [emoji, setEmoji] = useState(t ? t.emoji : '✨');
+  const [custom, setCustom] = useState('');
   const [title, setTitle] = useState(t ? t.title : '');
   const [times, setTimes] = useState(t ? t.times || 1 : 1);
   const [info, setInfo] = useState(t ? t.info || '' : '');
@@ -572,11 +593,19 @@ function TaskForm({ t }) {
       <Label>Icône</Label>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {EMOJIS.map((e) => (
-          <Pressable key={e} onPress={() => setEmoji(e)} style={{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: emoji === e ? C.card2 : 'transparent', borderWidth: emoji === e ? 2 : 0, borderColor: C.green }}>
+          <Pressable key={e} onPress={() => { setEmoji(e); setCustom(''); }} style={{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: emoji === e ? C.card2 : 'transparent', borderWidth: emoji === e ? 2 : 0, borderColor: C.green }}>
             <Text style={{ fontSize: 22 }}>{e}</Text>
           </Pressable>
         ))}
       </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 }}>
+        <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.green }}>
+          <Text style={{ fontSize: 28 }}>{emoji}</Text>
+        </View>
+        <Input style={{ flex: 1 }} value={custom} placeholder="…ou tape n'importe quel emoji 😀"
+          onChangeText={(v) => { setCustom(v); const e = firstEmoji(v); if (e) setEmoji(e); }} />
+      </View>
+      <Txt muted style={{ fontSize: 12, marginTop: 4 }}>Ouvre le clavier emoji de ton téléphone (😀) ou, sur PC, Windows + .</Txt>
       <Label>Consignes (facultatif, visibles par tous)</Label>
       <Input value={info} onChangeText={setInfo} placeholder="ex. Sacs jaunes le mardi, bac vert le jeudi" multiline />
       <Label>Combien de fois par semaine ?</Label>

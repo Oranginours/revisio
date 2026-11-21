@@ -295,3 +295,25 @@ export async function removeLastTaskIn(fid, wk, week, uid) {
   await updateDoc(`families/${fid}/weeks/${wk}`, { ['assign.' + uid]: list, ['done.' + k]: undefined, ['doing.' + k]: undefined, ['notes.' + k]: undefined });
   return list;
 }
+
+// Retire n'importe quelle tâche d'une personne (les cases cochées, « en cours » et notes suivent)
+export async function removeTaskAt(fid, wk, week, uid, i) {
+  const old = ((week.assign || {})[uid] || []).slice();
+  if (i < 0 || i >= old.length) return week;
+  const list = old.filter((_, j) => j !== i);
+  const patch = { ['assign.' + uid]: list };
+  const next = { ...week, assign: { ...week.assign, [uid]: list } };
+  ['done', 'doing', 'notes'].forEach((f) => {
+    const m = { ...(week[f] || {}) };
+    for (let j = i; j < old.length; j++) {
+      const v = j + 1 < old.length ? m[doneKey(uid, j + 1)] : undefined;
+      if (v !== m[doneKey(uid, j)] || j === old.length - 1) patch[f + '.' + doneKey(uid, j)] = v;
+    }
+    for (let j = i; j < old.length; j++) m[doneKey(uid, j)] = j + 1 < old.length ? (week[f] || {})[doneKey(uid, j + 1)] : undefined;
+    next[f] = m;
+  });
+  const ex = (week.extra || {})[uid] || 0;
+  if (ex && i >= old.length - ex) { patch['extra.' + uid] = ex - 1; next.extra = { ...(week.extra || {}), [uid]: ex - 1 }; }
+  await updateDoc(`families/${fid}/weeks/${wk}`, patch);
+  return next;
+}

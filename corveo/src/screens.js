@@ -432,7 +432,7 @@ export function FamilyScreen() {
 }
 
 function MemberSheet({ m }) {
-  const { fam, week, tasks, setModal, refresh, actAs, actor } = useCtx();
+  const { fam, week, setWeek, tasks, setModal, refresh, actAs, actor } = useCtx();
   const [busy, setBusy] = useState(false);
   const run = async (fn, msg) => { setBusy(true); try { await fn(); await refresh(true); if (msg) toast(msg); setModal(null); } catch (e) { toast(e.message, 'bad'); } setBusy(false); };
   const list = (week && week.assign && week.assign[m.id]) || [];
@@ -451,12 +451,21 @@ function MemberSheet({ m }) {
           {list.map((t, i) => {
             const k = D.doneKey(m.id, i);
             const done = !!(week.done && week.done[k]);
-            return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
-              onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)}
-              onCheck={async () => {
-                week.done = { ...(week.done || {}), [k]: done ? undefined : Date.now() }; setT((x) => x + 1);
-                try { await D.setDone(fam.id, m.id, i, !done); refresh(); } catch (e) { toast(e.message, 'bad'); }
-              }} />;
+            return (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ flex: 1 }}>
+                  <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
+                    onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)}
+                    onCheck={async () => {
+                      week.done = { ...(week.done || {}), [k]: done ? undefined : Date.now() }; setT((x) => x + 1);
+                      try { await D.setDone(fam.id, m.id, i, !done); refresh(); } catch (e) { toast(e.message, 'bad'); }
+                    }} />
+                </View>
+                <Pressable hitSlop={8} style={{ marginBottom: 8, padding: 6 }} onPress={() => ask('Retirer cette tâche ?', `${t.e} ${t.n} (${m.name})`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => {
+                  try { setWeek(await D.removeTaskAt(fam.id, D.weekId(), week, m.id, i)); toast('Tâche retirée'); } catch (e) { toast(e.message, 'bad'); }
+                } }])}><Text style={{ color: C.muted, fontSize: 18 }}>✕</Text></Pressable>
+              </View>
+            );
           })}
         </View>
       )}

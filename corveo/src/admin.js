@@ -168,12 +168,12 @@ function WeekEditor({ f, members }) {
     catch (e) { toast(e.message, 'bad'); }
     setBusy(false); setGiving(null);
   };
-  const removeLast = async (uid) => {
+  const removeAt = (uid, i, t) => ask('Retirer cette tâche ?', `${t.e} ${t.n}`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => {
     setBusy(true);
-    try { const list = await D.removeLastTaskIn(f.id, wk, week, uid); const k = D.doneKey(uid, list.length); const done = { ...(week.done || {}) }; delete done[k]; setWeek({ ...week, done, assign: { ...week.assign, [uid]: list } }); }
+    try { setWeek(await D.removeTaskAt(f.id, wk, week, uid, i)); toast('Tâche retirée'); }
     catch (e) { toast(e.message, 'bad'); }
     setBusy(false);
-  };
+  } }]);
   useEffect(() => { let ok = true; setWeek(undefined); D.getWeek(f.id, wk).then((w) => ok && setWeek(w || null)).catch(() => ok && setWeek(null)); return () => { ok = false; }; }, [wk]);
   const toggle = async (uid, i) => {
     const k = D.doneKey(uid, i);
@@ -231,12 +231,12 @@ function WeekEditor({ f, members }) {
                   </View>
                   <Text style={{ fontSize: 16 }}>{t.e}</Text>
                   <Text style={{ color: done ? C.muted : C.ink, flex: 1, textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}</Text>
+                  <Pressable disabled={busy} hitSlop={10} onPress={() => removeAt(m.id, i, t)}><Text style={{ color: C.muted, fontSize: 16, paddingHorizontal: 6 }}>✕</Text></Pressable>
                 </Pressable>
               );
             })}
             <Row style={{ marginTop: 4, marginLeft: 6 }}>
               <Pressable disabled={busy} onPress={() => setGiving(giving === m.id ? null : m.id)} hitSlop={6}><Text style={{ color: C.blue, fontWeight: '800', fontSize: 13 }}>＋ Ajouter une tâche</Text></Pressable>
-              {list.length > 0 && <Pressable disabled={busy} onPress={() => removeLast(m.id)} hitSlop={6}><Text style={{ color: C.muted, fontWeight: '700', fontSize: 13 }}>  ·  Retirer la dernière</Text></Pressable>}
             </Row>
             {giving === m.id && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 6 }}>

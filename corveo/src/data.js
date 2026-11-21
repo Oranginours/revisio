@@ -279,3 +279,19 @@ export async function recomputeExtras(fam, tasks) {
   if (changed) await updateDoc(`families/${fam.id}/weeks/${wk}`, patch);
   return changed;
 }
+
+// Ajoute une tâche à quelqu'un pour une semaine donnée (admin)
+export async function giveTaskIn(fid, wk, week, uid, task) {
+  const list = ((week.assign || {})[uid] || []).concat([{ t: task.id, n: task.title, e: task.emoji }]);
+  await updateDoc(`families/${fid}/weeks/${wk}`, { ['assign.' + uid]: list });
+  return list;
+}
+// Retire une tâche (la dernière seulement, pour ne pas décaler les cases cochées)
+export async function removeLastTaskIn(fid, wk, week, uid) {
+  const list = ((week.assign || {})[uid] || []).slice();
+  if (!list.length) return list;
+  const i = list.length - 1, k = doneKey(uid, i);
+  list.pop();
+  await updateDoc(`families/${fid}/weeks/${wk}`, { ['assign.' + uid]: list, ['done.' + k]: undefined, ['doing.' + k]: undefined, ['notes.' + k]: undefined });
+  return list;
+}

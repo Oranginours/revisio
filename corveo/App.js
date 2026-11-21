@@ -113,8 +113,7 @@ export default function App() {
 
   const admin = D.isAdminUser(me);
   const tabs = admin ? [...TABS, ['admin', '🛡️', 'Admin']] : TABS;
-  const AdminTab = () => <AdminScreen reload={loadAll} />;
-  const Screen = { week: WeekScreen, family: FamilyScreen, tasks: TasksScreen, me: ProfileScreen, admin: AdminTab }[tab] || WeekScreen;
+  const Screen = { week: WeekScreen, family: FamilyScreen, tasks: TasksScreen, me: ProfileScreen }[tab] || WeekScreen;
   const titles = { week: 'Mes tâches', family: 'Famille', tasks: 'Tâches', me: 'Moi', admin: 'Admin' };
   const managedSel = isParent && actingId ? members.find((m) => m.id === actingId && m.managed) : null;
   const actor = managedSel || me;
@@ -142,7 +141,7 @@ export default function App() {
         )}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={pulling} tintColor={C.green} colors={[C.green]} onRefresh={async () => { setPulling(true); await refresh(true); setPulling(false); }} />}>
-          <Screen />
+          {tab === 'admin' ? <AdminScreen reload={loadAll} /> : <Screen />}
         </ScrollView>
         <View style={{ paddingHorizontal: 12, paddingTop: 4, paddingBottom: Platform.OS === 'android' ? 24 : isWeb ? 10 : 24, backgroundColor: C.bg }}>
           <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 20, padding: 4, borderWidth: 1, borderColor: C.line, maxWidth: 640, width: '100%', alignSelf: 'center' }}>

@@ -141,6 +141,7 @@ function FamEdit({ f, members, done, reload }) {
           <Txt>{m.name} <Text style={{ color: C.muted }}>@{m.username} · {m.role}{f.owner === m.id ? ' · créateur' : ''}</Text></Txt>
         </Row>
       ))}
+      <TasksEditor f={f} />
       <WeekEditor f={f} members={members} />
       <Btn kind="sec" small label="🚪 Entrer dans cette famille (parent)" style={{ marginTop: 12, alignSelf: 'flex-start' }} disabled={busy}
         onPress={() => run(async () => { await D.adminUpdateUser(currentUid(), { familyId: f.id, role: 'parent' }); await reload(); }, `Tu es dans ${f.name}`)} />
@@ -157,7 +158,22 @@ function WeekEditor({ f, members }) {
   const [week, setWeek] = useState(undefined);
   const [touchedPast, setTouchedPast] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [giving, setGiving] = useState(null);
+  useEffect(() => { D.getTasks(f.id).then(setTasks).catch(() => {}); }, [f.id]);
   const wk = D.weekIdOffset(n);
+  const give = async (uid, t) => {
+    setBusy(true);
+    try { const list = await D.giveTaskIn(f.id, wk, week, uid, t); setWeek({ ...week, assign: { ...week.assign, [uid]: list } }); toast(`${t.emoji} ajoutée`); }
+    catch (e) { toast(e.message, 'bad'); }
+    setBusy(false); setGiving(null);
+  };
+  const removeLast = async (uid) => {
+    setBusy(true);
+    try { const list = await D.removeLastTaskIn(f.id, wk, week, uid); const k = D.doneKey(uid, list.length); const done = { ...(week.done || {}) }; delete done[k]; setWeek({ ...week, done, assign: { ...week.assign, [uid]: list } }); }
+    catch (e) { toast(e.message, 'bad'); }
+    setBusy(false);
+  };
   useEffect(() => { let ok = true; setWeek(undefined); D.getWeek(f.id, wk).then((w) => ok && setWeek(w || null)).catch(() => ok && setWeek(null)); return () => { ok = false; }; }, [wk]);
   const toggle = async (uid, i) => {
     const k = D.doneKey(uid, i);
@@ -182,7 +198,7 @@ function WeekEditor({ f, members }) {
     catch (e) { toast(e.message, 'bad'); }
     setBusy(false);
   };
-  const people = members.filter((m) => week && week.assign && week.assign[m.id]);
+  const people = members.filter((m) => week && week.assign && (week.assign[m.id] || m.active !== false));
   return (
     <View style={{ marginTop: 14 }}>
       <Label>Tâches de la semaine</Label>
@@ -218,6 +234,20 @@ function WeekEditor({ f, members }) {
                 </Pressable>
               );
             })}
+            <Row style={{ marginTop: 4, marginLeft: 6 }}>
+              <Pressable disabled={busy} onPress={() => setGiving(giving === m.id ? null : m.id)} hitSlop={6}><Text style={{ color: C.blue, fontWeight: '800', fontSize: 13 }}>＋ Ajouter une tâche</Text></Pressable>
+              {list.length > 0 && <Pressable disabled={busy} onPress={() => removeLast(m.id)} hitSlop={6}><Text style={{ color: C.muted, fontWeight: '700', fontSize: 13 }}>  ·  Retirer la dernière</Text></Pressable>}
+            </Row>
+            {giving === m.id && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 6 }}>
+                {tasks.map((t) => (
+                  <Pressable key={t.id} disabled={busy} onPress={() => give(m.id, t)} style={{ backgroundColor: C.card2, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Text style={{ color: C.ink, fontSize: 13 }}>{t.emoji} {t.title}</Text>
+                  </Pressable>
+                ))}
+                {!tasks.length && <Txt muted>Crée d'abord des tâches ci-dessus.</Txt>}
+              </View>
+            )}
           </View>
         );
       })}
@@ -229,4 +259,88 @@ function WeekEditor({ f, members }) {
       )}
     </View>
   );
+}
+
+// Gérer la liste des tâches d'une famille
+function TasksEditor({ f }) {
+  const [tasks, setTasks] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState(null); // id ou 'new'
+  const [emoji, setEmoji] = useState('✨');
+  const [title, setTitle] = useState('');
+  const [times, setTimes] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const load = () => D.getTasks(f.id).then(setTasks).catch((e) => { toast(e.message, 'bad'); setTasks([]); });
+  useEffect(() => { if (open && !tasks) load(); }, [open]);
+  const start = (t) => { setEdit(t ? t.id : 'new'); setEmoji(t ? t.emoji : '✨'); setTitle(t ? t.title : ''); setTimes(t ? t.times || 1 : 1); };
+  const save = async () => {
+    if (!title.trim()) return toast('Écris le nom de la tâche', 'bad');
+    setBusy(true);
+    try {
+      const e = firstChar(emoji) || '✨';
+      if (edit === 'new') await D.addTask(f.id, { emoji: e, title, times }); else await D.editTask(f.id, edit, { emoji: e, title, times, info: (tasks.find((x) => x.id === edit) || {}).info || '' });
+      toast(edit === 'new' ? 'Tâche ajoutée ✅' : 'Tâche modifiée'); setEdit(null); await load();
+    } catch (er) { toast(er.message, 'bad'); }
+    setBusy(false);
+  };
+  const del = (t) => ask('Supprimer ?', `« ${t.title} » ne sera plus distribuée.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: async () => { try { await D.removeTask(f.id, t.id); await load(); } catch (e) { toast(e.message, 'bad'); } } }]);
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Pressable onPress={() => setOpen(!open)}><Label>{open ? '▾' : '▸'} Liste des tâches{tasks ? ` (${tasks.length})` : ''}</Label></Pressable>
+      {open && !tasks && <ActivityIndicator color={C.green} />}
+      {open && tasks && (
+        <View>
+          {tasks.map((t) => (
+            <View key={t.id}>
+              <Pressable onPress={() => (edit === t.id ? setEdit(null) : start(t))} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 }}>
+                <Text style={{ fontSize: 18 }}>{t.emoji}</Text>
+                <Text style={{ color: C.ink, flex: 1 }}>{t.title}</Text>
+                <Text style={{ color: C.muted, fontSize: 12 }}>{t.times || 1}×/sem.</Text>
+                <Pressable hitSlop={8} onPress={() => del(t)}><Text style={{ color: C.muted }}>  ✕</Text></Pressable>
+              </Pressable>
+              {edit === t.id && <TaskInline {...{ emoji, setEmoji, title, setTitle, times, setTimes, save, busy, cancel: () => setEdit(null) }} />}
+            </View>
+          ))}
+          {edit === 'new' ? <TaskInline {...{ emoji, setEmoji, title, setTitle, times, setTimes, save, busy, cancel: () => setEdit(null) }} />
+            : <Btn small kind="sec" label="＋ Nouvelle tâche" style={{ alignSelf: 'flex-start', marginTop: 6 }} onPress={() => start(null)} />}
+          <Txt muted style={{ fontSize: 11, marginTop: 6 }}>Une nouvelle tâche compte à la prochaine répartition. Pour la donner tout de suite à quelqu'un : « ＋ Ajouter une tâche » sous son nom, plus bas.</Txt>
+        </View>
+      )}
+    </View>
+  );
+}
+function TaskInline({ emoji, setEmoji, title, setTitle, times, setTimes, save, busy, cancel }) {
+  return (
+    <View style={{ backgroundColor: C.bg, borderRadius: 12, padding: 10, marginVertical: 6 }}>
+      <Row style={{ flexWrap: 'nowrap' }}>
+        <Input style={{ width: 64, textAlign: 'center', fontSize: 22 }} value={emoji} onChangeText={(v) => setEmoji(firstChar(v) || v)} />
+        <Input style={{ flex: 1 }} value={title} onChangeText={setTitle} placeholder="Nom de la tâche" />
+      </Row>
+      <Row style={{ marginTop: 8 }}>
+        <Btn small kind="sec" label="−" onPress={() => setTimes(Math.max(1, times - 1))} />
+        <Text style={{ color: C.ink, fontWeight: '800' }}>{times}× / semaine</Text>
+        <Btn small kind="sec" label="+" onPress={() => setTimes(Math.min(14, times + 1))} />
+      </Row>
+      <Row style={{ marginTop: 8 }}>
+        <Btn small label="Enregistrer" disabled={busy} onPress={save} />
+        <Btn small kind="ghost" label="Annuler" onPress={cancel} />
+      </Row>
+    </View>
+  );
+}
+// Premier emoji d'un texte (gère les emojis composés)
+function firstChar(txt) {
+  const cps = Array.from(String(txt || '').trim());
+  if (!cps.length) return '';
+  const cp = (c) => c.codePointAt(0);
+  const isRI = (c) => c && cp(c) >= 0x1f1e6 && cp(c) <= 0x1f1ff;
+  if (isRI(cps[0]) && isRI(cps[1])) return cps[0] + cps[1];
+  let out = cps[0], i = 1;
+  while (i < cps.length) {
+    const n = cp(cps[i]);
+    if (n === 0xfe0f || n === 0x20e3 || (n >= 0x1f3fb && n <= 0x1f3ff)) { out += cps[i]; i++; }
+    else if (n === 0x200d && cps[i + 1]) { out += cps[i] + cps[i + 1]; i += 2; }
+    else break;
+  }
+  return out;
 }

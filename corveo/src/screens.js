@@ -4,6 +4,7 @@ import { View, Text, Pressable, Share, ScrollView, Switch, ActivityIndicator } f
 import { C, Txt, H1, H2, Label, Card, Row, Btn, Input, Err, Stepper, TaskBar, Avatar, Chip, Pop, toast, ask, isWeb } from './ui';
 import * as D from './data';
 import { NewTaskQuick } from './admin';
+import { ReplaceTasks } from './replace';
 import { currentUid, usernameOk, normUser, signOut } from './fb';
 
 export const Ctx = createContext(null);
@@ -546,6 +547,9 @@ export function TasksScreen() {
       <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}>
         <H2 style={{ marginBottom: 0 }}>Les tâches de la maison</H2>
         {isParent && <Btn small label="＋ Ajouter" onPress={() => setModal(<TaskForm />)} />}
+      </Row>
+      <Row style={{ marginBottom: 10 }}>
+        {isParent && <Btn small kind="sec" label="📋 Remplacer toute la liste" onPress={() => setModal(<ReplaceTasks fam={fam} members={members} onDone={async () => { setModal(null); await refresh(true); }} onCancel={() => setModal(null)} />)} />}
       </Row>
       {tasks.map((t) => (
         <Pressable key={t.id} onPress={() => (isParent ? setModal(<TaskForm t={t} />) : null)}

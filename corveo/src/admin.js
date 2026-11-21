@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { C, Txt, H2, Label, Card, Row, Btn, Input, Avatar, Chip, toast, ask } from './ui';
 import * as D from './data';
+import { ReplaceTasks } from './replace';
 import { currentUid } from './fb';
 
 export function AdminScreen({ reload }) {
@@ -141,6 +142,7 @@ function FamEdit({ f, members, done, reload }) {
           <Txt>{m.name} <Text style={{ color: C.muted }}>@{m.username} · {m.role}{f.owner === m.id ? ' · créateur' : ''}</Text></Txt>
         </Row>
       ))}
+      <ReplaceBox f={f} members={members} reload={reload} />
       <TasksEditor f={f} />
       <WeekEditor f={f} members={members} />
       <Btn kind="sec" small label="🚪 Entrer dans cette famille (parent)" style={{ marginTop: 12, alignSelf: 'flex-start' }} disabled={busy}
@@ -369,4 +371,10 @@ export function NewTaskQuick({ onAdd, busy }) {
       <Btn small label="＋ Donner cette tâche" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={busy} onPress={add} />
     </View>
   );
+}
+
+function ReplaceBox({ f, members, reload }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <Btn small kind="sec" label="📋 Remplacer toutes les tâches" style={{ marginTop: 14, alignSelf: 'flex-start' }} onPress={() => setOpen(true)} />;
+  return <View style={{ marginTop: 14 }}><ReplaceTasks fam={f} members={members} onDone={() => { setOpen(false); reload(); }} onCancel={() => setOpen(false)} /></View>;
 }

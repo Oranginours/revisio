@@ -317,3 +317,36 @@ export async function removeTaskAt(fid, wk, week, uid, i) {
   await updateDoc(`families/${fid}/weeks/${wk}`, patch);
   return next;
 }
+
+// Déplace une tâche d'une personne à une autre (statut et notes suivent la tâche)
+export async function moveTask(fid, week, fromUid, i, toUid) {
+  if (fromUid === toUid) return week;
+  const from = ((week.assign || {})[fromUid] || []).slice();
+  if (i < 0 || i >= from.length) return week;
+  const task = from[i];
+  const to = ((week.assign || {})[toUid] || []).slice();
+  const j = to.length;
+  const patch = {};
+  const next = { ...week, assign: { ...week.assign } };
+  // 1) on retire chez « from » en décalant les cases suivantes
+  const rest = from.filter((_, x) => x !== i);
+  patch['assign.' + fromUid] = rest; next.assign[fromUid] = rest;
+  ['done', 'doing', 'notes'].forEach((f) => {
+    const src = week[f] || {};
+    const m = { ...src };
+    const moved = src[doneKey(fromUid, i)];
+    for (let x = i; x < from.length; x++) {
+      const v = x + 1 < from.length ? src[doneKey(fromUid, x + 1)] : undefined;
+      patch[f + '.' + doneKey(fromUid, x)] = v; m[doneKey(fromUid, x)] = v;
+    }
+    // 2) on l'ajoute chez « to » avec son statut et ses notes
+    patch[f + '.' + doneKey(toUid, j)] = moved; m[doneKey(toUid, j)] = moved;
+    next[f] = m;
+  });
+  const toList = to.concat([task]);
+  patch['assign.' + toUid] = toList; next.assign[toUid] = toList;
+  const ex = (week.extra || {})[fromUid] || 0;
+  if (ex && i >= from.length - ex) { patch['extra.' + fromUid] = ex - 1; next.extra = { ...(week.extra || {}), [fromUid]: ex - 1 }; }
+  await updateDoc(`families/${fid}/weeks/${weekId()}`, patch);
+  return next;
+}

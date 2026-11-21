@@ -5,6 +5,7 @@ import { C, Txt, H1, H2, Label, Card, Row, Btn, Input, Err, Stepper, TaskBar, Av
 import * as D from './data';
 import { NewTaskQuick } from './admin';
 import { ReplaceTasks } from './replace';
+import { Draggable } from './drag';
 import { currentUid, usernameOk, normUser, signOut } from './fb';
 
 export const Ctx = createContext(null);
@@ -200,19 +201,23 @@ export function WeekScreen() {
       {mine.length === 0 && <Txt muted>Rien pour toi cette semaine.</Txt>}
       {mine.map((t, i) => {
         const k = D.doneKey(uid, i);
-        return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
-          onPress={() => setModal(<TaskSheet uid={uid} i={i} />)} onCheck={() => toggle(i)} extra={i >= mine.length - extra} />;
+        return (
+          <Draggable key={i} uid={uid} i={i} t={t} enabled={isParent}>
+            <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
+              onPress={() => setModal(<TaskSheet uid={uid} i={i} />)} onCheck={() => toggle(i)} extra={i >= mine.length - extra} />
+          </Draggable>
+        );
       })}
-      {mine.length > 0 && <Txt muted style={{ fontSize: 12, marginTop: 2 }}>Touche une tâche pour dire qu'elle est en cours ou ajouter une note.</Txt>}
+      {mine.length > 0 && <Txt muted style={{ fontSize: 12, marginTop: 2 }}>Touche une tâche pour dire qu'elle est en cours ou ajouter une note.{isParent ? ' Appui long pour la glisser chez quelqu\'un d\'autre.' : ''}</Txt>}
       <Others members={members} week={week} />
     </View>
   );
 }
 
-export function TaskRow({ t, status, notes, onPress, onCheck, extra, who }) {
+export function TaskRow({ t, status, notes, onPress, onCheck, extra, who, onLongPress, onPressOut, delayLongPress }) {
   const done = status === 'done', doing = status === 'doing';
   return (
-    <Pressable onPress={onPress}
+    <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut} delayLongPress={delayLongPress}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <Text style={{ fontSize: 26 }}>{t.e || '✨'}</Text>
       <View style={{ flex: 1 }}>
@@ -241,7 +246,7 @@ export function TaskRow({ t, status, notes, onPress, onCheck, extra, who }) {
 
 // Les tâches des autres : on voit qui fait quoi, ce qui est en cours, et les notes
 function Others({ members, week }) {
-  const { setModal, actor } = useCtx();
+  const { setModal, actor, isParent } = useCtx();
   const [open, setOpen] = useState(null);
   const list = members.filter((m) => week.assign && week.assign[m.id] && m.id !== actor.id);
   if (!list.length) return null;
@@ -267,7 +272,11 @@ function Others({ members, week }) {
               <View style={{ marginTop: 8, marginLeft: 8 }}>
                 {tasks.map((t, i) => {
                   const k = D.doneKey(m.id, i);
-                  return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length} onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)} />;
+                  return (
+                    <Draggable key={i} uid={m.id} i={i} t={t} enabled={isParent}>
+                      <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length} onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)} />
+                    </Draggable>
+                  );
                 })}
               </View>
             )}

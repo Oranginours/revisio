@@ -11,6 +11,7 @@ import { AdminScreen } from './src/admin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Avatar } from './src/ui';
 import { Switcher } from './src/screens';
+import { DragProvider } from './src/drag';
 
 const TABS = [['week', '✅', 'Mes tâches'], ['family', '👨‍👩‍👧', 'Famille'], ['tasks', '📋', 'Tâches'], ['me', '🙂', 'Moi']];
 
@@ -24,6 +25,7 @@ export default function App() {
   const [tab, setTab] = useState('week');
   const [modal, setModal] = useState(null);
   const [pulling, setPulling] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const famRef = useRef(null);
   const [actingId, setActingId] = useState(null); // profil sans téléphone utilisé par un parent
   useEffect(() => { AsyncStorage.getItem('corveo_acting').then((v) => v && setActingId(v)).catch(() => {}); }, []);
@@ -120,10 +122,16 @@ export default function App() {
   const ctx = { me, actor, actAs, fam, members, tasks, week, setWeek, refresh, isParent, setModal, logout };
   const myStats = week ? D.stats(week, actor.id) : { done: 0, total: 0 };
   const hasManaged = isParent && members.some((m) => m.managed);
+  const onDrop = async (d, toUid) => {
+    const to = members.find((m) => m.id === toUid);
+    try { const next = await D.moveTask(fam.id, week, d.uid, d.i, toUid); setWeek(next); toast(`${d.t.e} donnée à ${to ? to.name : '…'}`); }
+    catch (e) { toast(e.message, 'bad'); refresh(); }
+  };
   const left = myStats.total - myStats.done;
 
   return (
     <Ctx.Provider value={ctx}>
+     <DragProvider members={members} onDrop={onDrop} onState={setDragging}>
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <StatusBar style="light" />
         <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', maxWidth: 640, width: '100%', alignSelf: 'center' }}>
@@ -139,7 +147,7 @@ export default function App() {
             <Text style={{ color: '#C4B5FD', fontWeight: '900' }}>Revenir à moi ›</Text>
           </Pressable>
         )}
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled"
+        <ScrollView style={{ flex: 1 }} scrollEnabled={!dragging} contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={pulling} tintColor={C.green} colors={[C.green]} onRefresh={async () => { setPulling(true); await refresh(true); setPulling(false); }} />}>
           {tab === 'admin' ? <AdminScreen reload={loadAll} /> : <Screen />}
         </ScrollView>
@@ -169,6 +177,7 @@ export default function App() {
         </Modal>
         <ToastHost />
       </KeyboardAvoidingView>
+     </DragProvider>
     </Ctx.Provider>
   );
 }

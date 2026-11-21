@@ -3,6 +3,7 @@ import React, { useState, useContext, createContext } from 'react';
 import { View, Text, Pressable, Share, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { C, Txt, H1, H2, Label, Card, Row, Btn, Input, Err, Stepper, TaskBar, Avatar, Chip, Pop, toast, ask, isWeb } from './ui';
 import * as D from './data';
+import { NewTaskQuick } from './admin';
 import { currentUid, usernameOk, normUser, signOut } from './fb';
 
 export const Ctx = createContext(null);
@@ -468,6 +469,11 @@ function MemberSheet({ m }) {
                 <Text style={{ fontSize: 20 }}>{t.emoji}</Text><Txt>{t.title}</Txt>
               </Pressable>
             ))}
+            <NewTaskQuick busy={busy} onAdd={(t, keep) => run(async () => {
+              let task = { id: 'x' + Date.now().toString(36), title: t.title.trim(), emoji: t.emoji };
+              if (keep) { const d = await D.addTask(fam.id, t); task = { id: d.id, title: d.title, emoji: d.emoji }; }
+              await D.giveTask(fam.id, week, m.id, task);
+            }, `Tâche donnée à ${m.name}`)} />
           </View>
         ) : <Btn kind="sec" small label="➕ Lui donner une tâche en plus" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => setGive(true)} />
       )}

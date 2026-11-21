@@ -245,9 +245,13 @@ function WeekEditor({ f, members }) {
                     <Text style={{ color: C.ink, fontSize: 13 }}>{t.emoji} {t.title}</Text>
                   </Pressable>
                 ))}
-                {!tasks.length && <Txt muted>Crée d'abord des tâches ci-dessus.</Txt>}
               </View>
             )}
+            {giving === m.id && <NewTaskQuick busy={busy} onAdd={async (t, keep) => {
+              let task = { id: 'x' + Date.now().toString(36), title: t.title.trim(), emoji: t.emoji };
+              if (keep) { try { const d = await D.addTask(f.id, t); task = { id: d.id, title: d.title, emoji: d.emoji }; setTasks(await D.getTasks(f.id)); } catch (e) { return toast(e.message, 'bad'); } }
+              await give(m.id, task);
+            }} />}
           </View>
         );
       })}
@@ -343,4 +347,26 @@ function firstChar(txt) {
     else break;
   }
   return out;
+}
+
+// Créer une tâche toute neuve et la donner directement
+export function NewTaskQuick({ onAdd, busy }) {
+  const [emoji, setEmoji] = useState('✨');
+  const [title, setTitle] = useState('');
+  const [keep, setKeep] = useState(false);
+  const add = () => { if (!title.trim()) return toast('Écris le nom de la tâche', 'bad'); onAdd({ emoji: firstChar(emoji) || '✨', title, times: 1 }, keep); setTitle(''); };
+  return (
+    <View style={{ backgroundColor: C.bg, borderRadius: 12, padding: 10, marginTop: 8, marginLeft: 6 }}>
+      <Text style={{ color: C.muted, fontWeight: '800', fontSize: 12, marginBottom: 6 }}>OU UNE NOUVELLE TÂCHE</Text>
+      <Row style={{ flexWrap: 'nowrap' }}>
+        <Input style={{ width: 60, textAlign: 'center', fontSize: 22 }} value={emoji} onChangeText={(v) => setEmoji(firstChar(v) || v)} />
+        <Input style={{ flex: 1 }} value={title} onChangeText={setTitle} placeholder="ex. Ranger le garage" onSubmitEditing={add} />
+      </Row>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 8 }}>
+        <Txt style={{ flex: 1, fontSize: 13 }}>L'ajouter aussi à la liste (toutes les semaines)</Txt>
+        <Switch value={keep} onValueChange={setKeep} trackColor={{ true: C.green }} />
+      </Row>
+      <Btn small label="＋ Donner cette tâche" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={busy} onPress={add} />
+    </View>
+  );
 }

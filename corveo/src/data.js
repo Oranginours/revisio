@@ -231,3 +231,51 @@ export async function createManaged(fid, { name, avatar, color }) {
 }
 export const updateManaged = (id, patch) => updateDoc(`users/${id}`, patch);
 export const deleteManaged = (id) => deleteDoc(`users/${id}`);
+
+/* ---------- Admin : semaines passées ---------- */
+export const weekIdOffset = (n) => { const d = mondayOf(); d.setDate(d.getDate() + 7 * n + 3); return weekId(d); };
+export function weekLabel(n) {
+  const d = mondayOf(); d.setDate(d.getDate() + 7 * n);
+  const e = new Date(d); e.setDate(e.getDate() + 6);
+  const f = (x) => `${x.getDate()}/${x.getMonth() + 1}`;
+  return n === 0 ? `Cette semaine (${f(d)} → ${f(e)})` : n === -1 ? `Semaine dernière (${f(d)} → ${f(e)})` : `Du ${f(d)} au ${f(e)}`;
+}
+export async function setDoneIn(fid, wk, uid, i, on) {
+  const k = doneKey(uid, i);
+  return updateDoc(`families/${fid}/weeks/${wk}`, { ['done.' + k]: on ? Date.now() : undefined, ['doing.' + k]: undefined });
+}
+// Recalcule les tâches en plus de cette semaine d'après la semaine dernière (après avoir corrigé des cases)
+export async function recomputeExtras(fam, tasks) {
+  const wk = weekId();
+  const cur = await getWeek(fam.id, wk);
+  if (!cur || !cur.assign) return 0;
+  const prev = await getWeek(fam.id, prevWeekId());
+  const uids = Object.keys(cur.assign);
+  const want = extrasFrom(prev, fam, uids);
+  const patch = {};
+  let changed = 0;
+  uids.forEach((u) => {
+    const had = (cur.extra || {})[u] || 0, need = want[u] || 0;
+    if (had === need) return;
+    let list = (cur.assign[u] || []).slice();
+    if (need < had) {
+      const cut = Math.min(had - need, list.length);
+      for (let i = list.length - cut; i < list.length; i++) {
+        const k = doneKey(u, i);
+        if (cur.done && cur.done[k]) patch['done.' + k] = undefined;
+        if (cur.doing && cur.doing[k]) patch['doing.' + k] = undefined;
+        if (cur.notes && cur.notes[k]) patch['notes.' + k] = undefined;
+      }
+      list = list.slice(0, list.length - cut);
+    } else if (tasks.length) {
+      const mine = new Set(list.map((x) => x.t));
+      const pool = shuffle(tasks).sort((a, b) => (mine.has(a.id) ? 1 : 0) - (mine.has(b.id) ? 1 : 0));
+      for (let j = 0; j < need - had; j++) { const t = pool[j % pool.length]; list.push({ t: t.id, n: t.title, e: t.emoji }); }
+    }
+    patch['assign.' + u] = list;
+    patch['extra.' + u] = need;
+    changed++;
+  });
+  if (changed) await updateDoc(`families/${fam.id}/weeks/${wk}`, patch);
+  return changed;
+}

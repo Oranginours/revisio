@@ -141,11 +141,92 @@ function FamEdit({ f, members, done, reload }) {
           <Txt>{m.name} <Text style={{ color: C.muted }}>@{m.username} · {m.role}{f.owner === m.id ? ' · créateur' : ''}</Text></Txt>
         </Row>
       ))}
+      <WeekEditor f={f} members={members} />
       <Btn kind="sec" small label="🚪 Entrer dans cette famille (parent)" style={{ marginTop: 12, alignSelf: 'flex-start' }} disabled={busy}
         onPress={() => run(async () => { await D.adminUpdateUser(currentUid(), { familyId: f.id, role: 'parent' }); await reload(); }, `Tu es dans ${f.name}`)} />
       <Btn kind="danger" small label="🗑️ Supprimer la famille" style={{ marginTop: 10, alignSelf: 'flex-start' }} disabled={busy}
         onPress={() => ask('Supprimer la famille ?', `« ${f.name} », ses tâches et ses semaines seront effacées. Les membres resteront, sans famille.`, [
           { text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => run(async () => { await D.deleteFamily(f, members); if (members.some((m) => m.id === currentUid())) await reload(); }, 'Famille supprimée') }])} />
     </Panel>
+  );
+}
+
+// Cocher / décocher les tâches d'une semaine (même passée)
+function WeekEditor({ f, members }) {
+  const [n, setN] = useState(0);
+  const [week, setWeek] = useState(undefined);
+  const [touchedPast, setTouchedPast] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const wk = D.weekIdOffset(n);
+  useEffect(() => { let ok = true; setWeek(undefined); D.getWeek(f.id, wk).then((w) => ok && setWeek(w || null)).catch(() => ok && setWeek(null)); return () => { ok = false; }; }, [wk]);
+  const toggle = async (uid, i) => {
+    const k = D.doneKey(uid, i);
+    const on = !(week.done && week.done[k]);
+    setWeek({ ...week, done: { ...(week.done || {}), [k]: on ? Date.now() : undefined } });
+    try { await D.setDoneIn(f.id, wk, uid, i, on); if (n < 0) setTouchedPast(true); }
+    catch (e) { toast(e.message, 'bad'); }
+  };
+  const all = async (uid, on) => {
+    const list = (week.assign || {})[uid] || [];
+    setBusy(true);
+    const done = { ...(week.done || {}) };
+    try {
+      for (let i = 0; i < list.length; i++) { const k = D.doneKey(uid, i); if (!!done[k] !== on) { await D.setDoneIn(f.id, wk, uid, i, on); done[k] = on ? Date.now() : undefined; } }
+      setWeek({ ...week, done }); if (n < 0) setTouchedPast(true);
+    } catch (e) { toast(e.message, 'bad'); }
+    setBusy(false);
+  };
+  const recompute = async () => {
+    setBusy(true);
+    try { const tasks = await D.getTasks(f.id); const c = await D.recomputeExtras(f, tasks); toast(c ? `♻️ Tâches en plus recalculées (${c} personne${c > 1 ? 's' : ''})` : 'Rien à changer'); setTouchedPast(false); }
+    catch (e) { toast(e.message, 'bad'); }
+    setBusy(false);
+  };
+  const people = members.filter((m) => week && week.assign && week.assign[m.id]);
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Label>Tâches de la semaine</Label>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Btn small kind="sec" label="‹" onPress={() => setN(n - 1)} />
+        <Text style={{ color: C.ink, fontWeight: '800', flex: 1, textAlign: 'center' }}>{D.weekLabel(n)}</Text>
+        <Btn small kind="sec" label="›" disabled={n >= 0} onPress={() => setN(Math.min(0, n + 1))} />
+      </View>
+      {week === undefined && <ActivityIndicator color={C.green} style={{ marginTop: 10 }} />}
+      {week === null && <Txt muted style={{ marginTop: 8 }}>Pas de répartition cette semaine-là.</Txt>}
+      {week && people.length === 0 && <Txt muted style={{ marginTop: 8 }}>Personne n'avait de tâches.</Txt>}
+      {week && people.map((m) => {
+        const list = week.assign[m.id] || [];
+        const st = D.stats(week, m.id);
+        return (
+          <View key={m.id} style={{ marginTop: 12 }}>
+            <Row style={{ flexWrap: 'nowrap' }}>
+              <Avatar m={m} size={26} />
+              <Text style={{ color: C.ink, fontWeight: '800', flex: 1 }}>{m.name} <Text style={{ color: C.muted }}>{st.done}/{st.total}</Text></Text>
+              <Pressable disabled={busy} onPress={() => all(m.id, st.done < st.total)} hitSlop={6}>
+                <Text style={{ color: C.green, fontWeight: '800', fontSize: 12 }}>{st.done < st.total ? 'Tout cocher' : 'Tout décocher'}</Text>
+              </Pressable>
+            </Row>
+            {list.map((t, i) => {
+              const done = !!(week.done && week.done[D.doneKey(m.id, i)]);
+              return (
+                <Pressable key={i} disabled={busy} onPress={() => toggle(m.id, i)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingLeft: 6 }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: done ? C.green : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                    {done && <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 13 }}>✓</Text>}
+                  </View>
+                  <Text style={{ fontSize: 16 }}>{t.e}</Text>
+                  <Text style={{ color: done ? C.muted : C.ink, flex: 1, textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        );
+      })}
+      {(touchedPast || n === -1) && week && (
+        <View style={{ backgroundColor: C.bg, borderRadius: 12, padding: 10, marginTop: 12 }}>
+          <Txt muted style={{ fontSize: 12 }}>Les tâches en plus de cette semaine viennent de la semaine dernière. Après une correction, recalcule-les :</Txt>
+          <Btn small kind="sec" label="♻️ Recalculer les tâches en plus" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={busy} onPress={recompute} />
+        </View>
+      )}
+    </View>
   );
 }

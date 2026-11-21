@@ -25,6 +25,13 @@ jobs:
       - run: npx expo install react-dom react-native-web @expo/metro-runtime
       - run: npx expo export --platform web
       - run: cp dist/index.html dist/404.html && touch dist/.nojekyll
+      # Corvéo (l'appli des tâches ménagères) dans /revisio/corveo/
+      - name: Corvéo web
+        working-directory: corveo
+        run: |
+          npm ci || npm install
+          npx expo install react-dom react-native-web @expo/metro-runtime
+          npx expo export --platform web --output-dir ../dist/corveo
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

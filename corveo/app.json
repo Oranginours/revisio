@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Corvéo",
+    "slug": "corveo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "oranginours",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "com.corveo.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F1420"
+      }
+    },
+    "plugins": ["expo-status-bar"],
+    "ios": {},
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png",
+      "name": "Corvéo",
+      "shortName": "Corvéo",
+      "themeColor": "#0F1420",
+      "backgroundColor": "#0F1420",
+      "lang": "fr"
+    },
+    "experiments": {
+      "baseUrl": "/revisio/corveo"
+    }
+  }
+}

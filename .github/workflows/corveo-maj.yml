@@ -1,0 +1,31 @@
+# Publie la mise à jour de Corvéo sur les téléphones quand son code change.
+name: Corvéo · mise à jour
+on:
+  push:
+    branches: [main]
+    paths: ['corveo/**']
+  workflow_dispatch:
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: corveo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Projet Expo prêt ?
+        id: ok
+        run: if grep -q '"projectId"' app.json; then echo "go=1" >> $GITHUB_OUTPUT; else echo "Lance d'abord « Corvéo · installation »"; fi
+      - uses: actions/setup-node@v4
+        if: steps.ok.outputs.go == '1'
+        with:
+          node-version: 22
+      - uses: expo/expo-github-action@v8
+        if: steps.ok.outputs.go == '1'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - if: steps.ok.outputs.go == '1'
+        run: npm ci || npm install
+      - if: steps.ok.outputs.go == '1'
+        run: eas update --channel preview --message "${{ github.event.head_commit.message || 'mise à jour' }}" --non-interactive

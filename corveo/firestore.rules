@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function inFamily(fid) { return signedIn() && me().familyId == fid; }
+    function isParent(fid) { return inFamily(fid) && me().role == 'parent'; }
+    function ownerOf(fid) { return get(/databases/$(database)/documents/families/$(fid)).data.owner; }
+
+    // Profils : chacun modifie le sien ; un parent peut modifier les membres de sa famille.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == '' && request.resource.data.familyId == '';
+      allow update: if signedIn() && (
+        (request.auth.uid == uid && (
+          request.resource.data.role == resource.data.role
+          || request.resource.data.role in ['', 'enfant']
+          || (request.resource.data.role == 'parent' && ownerOf(request.resource.data.familyId) == uid)
+        ))
+        || isParent(resource.data.familyId)
+      );
+    }
+
+    // Codes pour rejoindre une famille
+    match /codes/{code} {
+      allow read, create: if signedIn();
+      allow delete: if isParent(resource.data.familyId);
+    }
+
+    match /families/{fid} {
+      allow read: if inFamily(fid);
+      allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+      allow update: if isParent(fid);
+
+      match /tasks/{tid} {
+        allow read: if inFamily(fid);
+        allow write: if isParent(fid);
+      }
+      match /weeks/{wk} {
+        allow read, create, update: if inFamily(fid);
+        allow delete: if isParent(fid);
+      }
+    }
+  }
+}

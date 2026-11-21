@@ -3,6 +3,7 @@ name: Mise à jour de l'appli
 on:
   push:
     branches: [main, master]
+    paths-ignore: ['corveo/**', '.github/workflows/corveo-*']
   workflow_dispatch:
 jobs:
   update:

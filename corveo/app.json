@@ -17,7 +17,9 @@
         "backgroundColor": "#0F1420"
       }
     },
-    "plugins": ["expo-status-bar"],
+    "plugins": [
+      "expo-status-bar"
+    ],
     "ios": {},
     "web": {
       "bundler": "metro",
@@ -31,6 +33,14 @@
     },
     "experiments": {
       "baseUrl": "/revisio/corveo"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0ce1d260-34d7-4486-a08b-ca3eade5c313"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0ce1d260-34d7-4486-a08b-ca3eade5c313"
     }
   }
 }

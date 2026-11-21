@@ -139,7 +139,7 @@ export function NoFamily({ me, reload }) {
 const DAYS = ['', 'dernier jour !', '2 jours', '3 jours', '4 jours', '5 jours', '6 jours', '7 jours'];
 
 export function WeekScreen() {
-  const { me, fam, members, week, tasks, refresh, setWeek, isParent } = useCtx();
+  const { me, fam, members, week, tasks, refresh, setWeek, isParent, setModal } = useCtx();
   const [pop, setPop] = useState(0);
   if (!tasks.length) {
     return (
@@ -161,7 +161,7 @@ export function WeekScreen() {
     const key = D.doneKey(uid, i);
     const on = !(week.done && week.done[key]);
     // on coche tout de suite à l'écran, puis on enregistre
-    setWeek({ ...week, done: { ...(week.done || {}), [key]: on ? Date.now() : undefined } });
+    setWeek({ ...week, done: { ...(week.done || {}), [key]: on ? Date.now() : undefined }, doing: { ...(week.doing || {}), [key]: undefined } });
     if (on) setPop((p) => p + 1);
     try { await D.setDone(fam.id, uid, i, on); if (on && ms.done + 1 === ms.total) toast('🎉 Toutes tes tâches sont faites !'); }
     catch (e) { toast(e.message, 'bad'); refresh(); }
@@ -195,33 +195,50 @@ export function WeekScreen() {
       <H2>Mes tâches</H2>
       {mine.length === 0 && <Txt muted>Rien pour toi cette semaine.</Txt>}
       {mine.map((t, i) => {
-        const done = !!(week.done && week.done[D.doneKey(uid, i)]);
-        return <TaskRow key={i} t={t} done={done} onPress={() => toggle(i)} extra={i >= mine.length - extra} />;
+        const k = D.doneKey(uid, i);
+        return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
+          onPress={() => setModal(<TaskSheet uid={uid} i={i} />)} onCheck={() => toggle(i)} extra={i >= mine.length - extra} />;
       })}
-      <FamilyMini members={members} week={week} />
+      {mine.length > 0 && <Txt muted style={{ fontSize: 12, marginTop: 2 }}>Touche une tâche pour dire qu'elle est en cours ou ajouter une note.</Txt>}
+      <Others members={members} week={week} />
     </View>
   );
 }
 
-export function TaskRow({ t, done, onPress, extra, disabled }) {
+export function TaskRow({ t, status, notes, onPress, onCheck, extra, who }) {
+  const done = status === 'done', doing = status === 'doing';
   return (
-    <Pressable onPress={disabled ? null : onPress}
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : C.card, borderRadius: 18, padding: 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+    <Pressable onPress={onPress}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <Text style={{ fontSize: 26 }}>{t.e || '✨'}</Text>
       <View style={{ flex: 1 }}>
         <Text style={{ color: done ? C.muted : C.ink, fontSize: 16, fontWeight: '800', textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}</Text>
-        {extra && !done && <Text style={{ color: '#FCA5A5', fontSize: 12, fontWeight: '700' }}>tâche en plus</Text>}
-      </View>
-      <Pop trigger={done}>
-        <View style={{ width: 34, height: 34, borderRadius: 10, borderWidth: 3, borderColor: done ? C.green : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-          {done && <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 18 }}>✓</Text>}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+          {who ? <Text style={{ color: C.muted, fontSize: 12, fontWeight: '700' }}>{who}</Text> : null}
+          {doing && <Text style={{ color: C.yellow, fontSize: 12, fontWeight: '900' }}>⏳ EN COURS</Text>}
+          {extra && !done && <Text style={{ color: '#FCA5A5', fontSize: 12, fontWeight: '700' }}>tâche en plus</Text>}
+          {notes > 0 && <Text style={{ color: C.blue, fontSize: 12, fontWeight: '800' }}>💬 {notes}</Text>}
         </View>
-      </Pop>
+      </View>
+      {onCheck ? (
+        <Pressable onPress={onCheck} hitSlop={10}>
+          <Pop trigger={done}>
+            <View style={{ width: 34, height: 34, borderRadius: 10, borderWidth: 3, borderColor: done ? C.green : doing ? C.yellow : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+              {done ? <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 18 }}>✓</Text> : doing ? <Text style={{ fontSize: 14 }}>⏳</Text> : null}
+            </View>
+          </Pop>
+        </Pressable>
+      ) : (
+        <Text style={{ fontSize: 20 }}>{done ? '✅' : doing ? '⏳' : '⬜'}</Text>
+      )}
     </Pressable>
   );
 }
 
-function FamilyMini({ members, week }) {
+// Les tâches des autres : on voit qui fait quoi, ce qui est en cours, et les notes
+function Others({ members, week }) {
+  const { setModal } = useCtx();
+  const [open, setOpen] = useState(null);
   const list = members.filter((m) => week.assign && week.assign[m.id] && m.id !== currentUid());
   if (!list.length) return null;
   return (
@@ -229,16 +246,121 @@ function FamilyMini({ members, week }) {
       <H2>Les autres</H2>
       {list.map((m) => {
         const s = D.stats(week, m.id);
+        const tasks = week.assign[m.id] || [];
+        const doing = tasks.filter((_, i) => D.statusOf(week, D.doneKey(m.id, i)) === 'doing').length;
+        const isOpen = open === m.id;
         return (
-          <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <Avatar m={m} size={34} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: C.ink, fontWeight: '800', marginBottom: 3 }}>{m.name}{s.total && s.done === s.total ? ' ✅' : ''}</Text>
-              <TaskBar small done={s.done} total={s.total} />
-            </View>
+          <View key={m.id} style={{ marginBottom: 10 }}>
+            <Pressable onPress={() => setOpen(isOpen ? null : m.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Avatar m={m} size={34} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.ink, fontWeight: '800', marginBottom: 3 }}>{m.name}{s.total && s.done === s.total ? ' ✅' : ''}{doing ? `  ·  ⏳ ${doing} en cours` : ''}</Text>
+                <TaskBar small done={s.done} total={s.total} />
+              </View>
+              <Text style={{ color: C.muted, fontSize: 16 }}>{isOpen ? '▾' : '▸'}</Text>
+            </Pressable>
+            {isOpen && (
+              <View style={{ marginTop: 8, marginLeft: 8 }}>
+                {tasks.map((t, i) => {
+                  const k = D.doneKey(m.id, i);
+                  return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length} onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)} />;
+                })}
+              </View>
+            )}
           </View>
         );
       })}
+    </View>
+  );
+}
+
+// Fiche d'une tâche : statut (à faire / en cours / faite) et notes visibles par tous
+export function TaskSheet({ uid, i }) {
+  const { me, fam, week, setWeek, members, tasks, isParent, setModal, refresh } = useCtx();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!week || !week.assign || !week.assign[uid] || !week.assign[uid][i]) return <Txt muted>Cette tâche n'existe plus.</Txt>;
+  const t = week.assign[uid][i];
+  const k = D.doneKey(uid, i);
+  const status = D.statusOf(week, k);
+  const owner = members.find((m) => m.id === uid) || { name: '?' };
+  const mine = uid === me.id;
+  const canEdit = mine || isParent;
+  const info = (tasks.find((x) => x.id === t.t) || {}).info;
+  const notes = (week.notes || {})[k] || [];
+  const doingBy = week.doing && week.doing[k] && week.doing[k].by;
+
+  const setStatus = async (st) => {
+    if (busy || st === status) return;
+    setBusy(true);
+    const next = { ...week, done: { ...(week.done || {}) }, doing: { ...(week.doing || {}) } };
+    next.done[k] = st === 'done' ? Date.now() : undefined;
+    next.doing[k] = st === 'doing' ? { ts: Date.now(), by: me.name } : undefined;
+    setWeek(next);
+    try {
+      if (st === 'doing') await D.setDoing(fam.id, uid, i, true, me.name);
+      else if (st === 'done') await D.setDone(fam.id, uid, i, true);
+      else await D.setDone(fam.id, uid, i, false);
+      if (st === 'done') toast('✅ Tâche faite !');
+    } catch (e) { toast(e.message, 'bad'); refresh(); }
+    setBusy(false);
+  };
+  const send = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    try { const list = await D.addNote(fam.id, week, k, me, text); setWeek({ ...week, notes: { ...(week.notes || {}), [k]: list } }); setText(''); }
+    catch (e) { toast(e.message, 'bad'); }
+    setBusy(false);
+  };
+  const del = async (ts) => {
+    try { const list = await D.removeNote(fam.id, week, k, ts); setWeek({ ...week, notes: { ...(week.notes || {}), [k]: list.length ? list : undefined } }); }
+    catch (e) { toast(e.message, 'bad'); }
+  };
+  const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? "à l'instant" : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
+  const ST = [['todo', '⬜ À faire', C.card2], ['doing', '⏳ En cours', '#A16207'], ['done', '✅ Faite', C.greenDark]];
+
+  return (
+    <View>
+      <Row style={{ flexWrap: 'nowrap', marginBottom: 6 }}>
+        <Text style={{ fontSize: 40 }}>{t.e || '✨'}</Text>
+        <View style={{ flex: 1 }}>
+          <H2 style={{ marginBottom: 0 }}>{t.n}</H2>
+          <Txt muted>{mine ? 'Ta tâche' : `Tâche de ${owner.name}`}{status === 'doing' && doingBy ? ` · lancée par ${doingBy}` : ''}</Txt>
+        </View>
+      </Row>
+      {!!info && <View style={{ backgroundColor: C.bg, borderRadius: 14, padding: 12, marginTop: 6 }}><Txt muted bold style={{ fontSize: 12 }}>📌 CONSIGNES</Txt><Txt>{info}</Txt></View>}
+
+      <Label>Où ça en est</Label>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        {ST.map(([st, l, col]) => {
+          const on = status === st;
+          return (
+            <Pressable key={st} disabled={!canEdit} onPress={() => setStatus(st)}
+              style={({ pressed }) => ({ flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: 'center', backgroundColor: on ? col : C.bg, borderWidth: 2, borderColor: on ? col : C.line, opacity: !canEdit && !on ? 0.4 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+              <Text style={{ color: C.ink, fontWeight: '900', fontSize: 13 }}>{l}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {!canEdit && <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Seul {owner.name} ou un parent peut changer le statut.</Txt>}
+
+      <Label>Notes ({notes.length})</Label>
+      {notes.length === 0 && <Txt muted>Pas encore de note. Ex. « plus de liquide vaisselle », « je la fais ce soir ».</Txt>}
+      {notes.map((n) => (
+        <View key={n.ts} style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <Text style={{ fontSize: 22 }}>{n.a || '💬'}</Text>
+          <View style={{ flex: 1, backgroundColor: C.bg, borderRadius: 14, padding: 10 }}>
+            <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800' }}>{n.n} · {ago(n.ts)}</Text>
+            <Txt>{n.t}</Txt>
+          </View>
+          {(n.u === me.id || isParent) && <Pressable hitSlop={8} onPress={() => del(n.ts)}><Text style={{ color: C.muted }}>✕</Text></Pressable>}
+        </View>
+      ))}
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 4 }}>
+        <Input style={{ flex: 1 }} value={text} onChangeText={setText} placeholder="Écrire une note…" multiline onSubmitEditing={send} />
+        <Btn small label="Envoyer" onPress={send} disabled={busy || !text.trim()} />
+      </View>
+      <Btn kind="ghost" label="Fermer" style={{ marginTop: 14 }} onPress={() => setModal(null)} />
     </View>
   );
 }
@@ -325,10 +447,12 @@ function MemberSheet({ m }) {
           {list.map((t, i) => {
             const k = D.doneKey(m.id, i);
             const done = !!(week.done && week.done[k]);
-            return <TaskRow key={i} t={t} done={done} onPress={async () => {
-              week.done = { ...(week.done || {}), [k]: done ? undefined : Date.now() }; setT((x) => x + 1);
-              try { await D.setDone(fam.id, m.id, i, !done); refresh(); } catch (e) { toast(e.message, 'bad'); }
-            }} />;
+            return <TaskRow key={i} t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
+              onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)}
+              onCheck={async () => {
+                week.done = { ...(week.done || {}), [k]: done ? undefined : Date.now() }; setT((x) => x + 1);
+                try { await D.setDone(fam.id, m.id, i, !done); refresh(); } catch (e) { toast(e.message, 'bad'); }
+              }} />;
           })}
         </View>
       )}
@@ -390,7 +514,7 @@ export function TasksScreen() {
           <Txt muted style={{ fontSize: 13, marginTop: 8, marginBottom: 6 }}>Au maximum :</Txt>
           <Stepper value={fam.penMax ?? 3} onChange={(v) => setF({ penMax: v })} max={10} fmt={(v) => `+${v} / semaine`} />
           <Btn kind="sec" label="🔀 Refaire la répartition de cette semaine" style={{ marginTop: 16 }} onPress={redo} />
-          <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Chaque lundi, la nouvelle semaine se répartit toute seule.</Txt>
+          <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Chaque lundi, la nouvelle semaine se répartit toute seule, en évitant de redonner à chacun les mêmes tâches que les semaines d'avant.</Txt>
         </Card>
       )}
       <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}>
@@ -401,7 +525,10 @@ export function TasksScreen() {
         <Pressable key={t.id} onPress={() => (isParent ? setModal(<TaskForm t={t} />) : null)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 13, marginBottom: 8, borderWidth: 1, borderColor: C.line }}>
           <Text style={{ fontSize: 24 }}>{t.emoji}</Text>
-          <Text style={{ color: C.ink, fontWeight: '800', flex: 1, fontSize: 15 }}>{t.title}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: C.ink, fontWeight: '800', fontSize: 15 }}>{t.title}</Text>
+            {!!t.info && <Text style={{ color: C.muted, fontSize: 12 }} numberOfLines={2}>📌 {t.info}</Text>}
+          </View>
           <Chip>{t.times > 1 ? `${t.times}× / sem.` : '1× / sem.'}</Chip>
         </Pressable>
       ))}
@@ -417,11 +544,12 @@ function TaskForm({ t }) {
   const [emoji, setEmoji] = useState(t ? t.emoji : '✨');
   const [title, setTitle] = useState(t ? t.title : '');
   const [times, setTimes] = useState(t ? t.times || 1 : 1);
+  const [info, setInfo] = useState(t ? t.info || '' : '');
   const [err, setErr] = useState('');
   const save = async () => {
     if (!title.trim()) return setErr('Écris le nom de la tâche.');
     try {
-      if (t) await D.editTask(fam.id, t.id, { emoji, title, times }); else await D.addTask(fam.id, { emoji, title, times });
+      if (t) await D.editTask(fam.id, t.id, { emoji, title, times, info }); else await D.addTask(fam.id, { emoji, title, times, info });
       await refresh(true); setModal(null); toast(t ? 'Tâche modifiée' : 'Tâche ajoutée ✅');
     } catch (e) { setErr(e.message); }
   };
@@ -438,6 +566,8 @@ function TaskForm({ t }) {
           </Pressable>
         ))}
       </View>
+      <Label>Consignes (facultatif, visibles par tous)</Label>
+      <Input value={info} onChangeText={setInfo} placeholder="ex. Sacs jaunes le mardi, bac vert le jeudi" multiline />
       <Label>Combien de fois par semaine ?</Label>
       <Stepper value={times} onChange={setTimes} min={1} max={14} fmt={(v) => `${v}×`} />
       <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Ex. « Vider le lave-vaisselle » 7× : elle sera partagée entre plusieurs personnes.</Txt>

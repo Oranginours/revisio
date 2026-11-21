@@ -14,6 +14,7 @@ import { Progres } from './src/progres-screen';
 import { Search } from './src/search';
 import { Devoirs, todoCount, fetchHomework } from './src/devoirs';
 import { DefiPlay } from './src/defi';
+import { dailyFresh } from './src/daily';
 
 // Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
 const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'EDT'], ['devoirs', '📝', 'Devoirs'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
@@ -40,9 +41,10 @@ export default function App() {
       setReady(true);
       reschedule(S);
       if (!isWeb) { silentRefresh().then(() => fetchHomework()).catch(() => {}); setTimeout(() => checkClipboard(go), 800); }
+      setTimeout(() => { dailyFresh().catch(() => {}); }, 2500);
     })();
     const sub = AppState.addEventListener('change', (st) => {
-      if (st === 'active') { if (!isWeb) checkClipboard(go); }
+      if (st === 'active') { if (!isWeb) checkClipboard(go); dailyFresh().catch(() => {}); }
       else { persistNow(); reschedule(S); }
     });
     return () => sub.remove();

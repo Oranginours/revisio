@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, Pressable, Animated, Alert, PanResponder } from 'react-native';
 import { useApp, Card, H2, Txt, Rich, Btn, Row, Opt, Fb, Note, Progress, Input, Err, FadeIn, ask } from './ui';
-import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase } from './logic';
+import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pickPhrase, today } from './logic';
 import { S, commit, matOf } from './store';
 import { gemini } from './ai';
 import { ChapterGrades } from './school';
@@ -49,7 +49,7 @@ export function Item({ it, onGrade, onNext, onSkip }) {
   const head = (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-        <Text style={{ flex: 1, color: C.muted, fontWeight: '700', fontSize: 13 }}>{TYPE[it.t]}</Text>
+        <Text style={{ flex: 1, color: C.muted, fontWeight: '700', fontSize: 13 }}>{TYPE[it.t]}{it.x && it.x.nv === today() ? '  ·  ✨ Nouvelle' : ''}</Text>
         {onSkip ? <Pressable onPress={() => setMenu(!menu)} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 14, backgroundColor: menu ? C.priSoft : 'transparent' }}>
           <Text style={{ color: C.muted, fontSize: 20, fontWeight: '800', lineHeight: 22 }}>⋯</Text>
         </Pressable> : null}

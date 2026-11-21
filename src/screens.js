@@ -16,6 +16,7 @@ import { levelInfo, levelTitle, sessionDone } from './progress';
 import { WakeCard, WakeSettings } from './alarm';
 import { HomeworkCard } from './devoirs';
 import { TomorrowCard, openBagEditor } from './tomorrow';
+import { dailyFresh } from './daily';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -474,7 +475,7 @@ function Seg({ options, value, onChange }) {
   );
 }
 export function Settings() {
-  const { C, setModal } = useApp();
+  const { C, setModal, runAI } = useApp();
   const st = S.settings;
   const [key, setKey] = useState(st.apiKey);
   const [show, setShow] = useState(false);
@@ -567,6 +568,15 @@ export function Settings() {
         <Input value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} />
         <Txt muted style={{ marginTop: 6, fontSize: 12 }}>Change-le seulement si l'IA dit « modèle introuvable ».</Txt>
         <Btn label="Enregistrer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={saveAI} />
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 16 }}>
+          <View style={{ flex: 1 }}>
+            <Txt bold>✨ Nouvelles questions chaque jour</Txt>
+            <Txt muted style={{ fontSize: 12 }}>Chaque jour, l'IA ajoute des questions inédites à 2 chapitres en cours (DS proches en priorité). Elles passent en premier dans ta session.</Txt>
+          </View>
+          <Switch value={st.daily !== false} onValueChange={(v) => set('daily', v)} trackColor={{ true: C.pri }} />
+        </Row>
+        {st.daily !== false && !!st.apiKey && <Btn small kind="ghost" label="✨ En créer maintenant" style={{ alignSelf: 'flex-start', marginTop: 6 }}
+          onPress={() => runAI('Questions du jour', () => dailyFresh(true), "L'IA prépare tes nouvelles questions…").then((n) => { if (n === 0) toast("Pas de chapitre en cours avec un cours à interroger.", 'info'); }).catch((e) => toast(e.message, 'bad'))} />}
       </Card>
 
       {!isWeb && <>

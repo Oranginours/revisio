@@ -110,6 +110,8 @@ export function promptMore(ch, matiere, kind) {
   const p = ch.pack;
   const want = kind === 'ex'
     ? '8 nouveaux "exercices" variés (autres valeurs, autres situations), et des tableaux vides pour le reste'
+    : kind === 'daily'
+    ? '6 nouveaux "qcm" et 4 nouveaux "vf" sur des points du cours encore peu ou pas interrogés (angles différents, pièges classiques, applications), et des tableaux vides pour le reste'
     : `12 nouveaux "qcm", 8 nouveaux "vf"${p.exercices.length ? ', 6 nouveaux "exercices"' : ''}, et des tableaux vides pour le reste`;
   return `Tu aides un élève français à réviser le chapitre « ${ch.titre} » (${matiere}).
 Cours de l'élève : ${JSON.stringify({ resume: p.resume, formules: p.formules, vocab: p.vocab }).slice(0, 24000)}
@@ -167,7 +169,8 @@ export function buildSession(chs, goal = 15) {
     const s = c.srs || {}; const d = c.ds ? diffDays(t, c.ds) : 99;
     const its = items(c).map((i) => {
       const st = s[i.id]; let pr;
-      if (!st) pr = 2 + Math.random();
+      if (!st && i.x && i.x.nv === t) pr = 7 + Math.random(); // question du jour : toujours dans la session
+      else if (!st) pr = 2 + Math.random();
       else if (st.due <= t) pr = 3 + (5 - st.b) + Math.random();
       else if (d >= 0 && d <= 3 && st.b < 4) pr = 1 + (5 - st.b) * 0.3 + Math.random();
       else pr = -1;

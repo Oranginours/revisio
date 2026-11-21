@@ -2,7 +2,7 @@
 // Ces deux valeurs ne sont pas secrètes : elles disent juste à l'appli quel projet utiliser.
 // La sécurité vient des règles Firestore (voir FIREBASE.md).
 export const FIREBASE = {
-  apiKey: '',
-  projectId: '',
+  apiKey: 'AIzaSyD8MQpHawxHnCMOSTIWZGiEFZmkSwpNbqU',
+  projectId: 'corveo-b9a16',
 };
 export const configured = () => !!(FIREBASE.apiKey && FIREBASE.projectId);

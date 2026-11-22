@@ -52,32 +52,59 @@ export default function App() {
     famRef.current = f;
     setFam(f); setMembers(ms); setTasks(ts);
     const w = await D.ensureWeek(f, ms, ts);
-    setWeek(w);
+    if (!quiet()) { weekRef.current = w; setWeek(w); }
     setPhase('main');
   }, []);
 
-  // Rafraîchissement léger (la semaine), ou complet
+  // Écritures en cours : tant qu'il y en a, on n'écrase pas l'écran avec une version plus ancienne
+  const pending = useRef(0);
+  const lastWrite = useRef(0);
+  const quiet = () => pending.current > 0 || Date.now() - lastWrite.current < 2500;
+  const weekRef = useRef(null);
+  useEffect(() => { weekRef.current = week; }, [week]);
+
+  // Rafraîchissement léger (la semaine + la famille), ou complet
   const refresh = useCallback(async (full) => {
     try {
       if (full || !famRef.current) return await loadAll();
       const f = famRef.current;
-      const w = await D.getWeek(f.id, D.weekId());
-      if (w) setWeek(w); else await loadAll(); // nouvelle semaine : on la crée
+      const [w, nf, ms, ts] = await Promise.all([D.getWeek(f.id, D.weekId()), D.getFamily(f.id), D.getMembers(f.id), D.getTasks(f.id)]);
+      if (nf) { famRef.current = nf; setFam(nf); }
+      if (ms) { setMembers(ms); const mine = ms.find((m) => m.id === currentUid()); if (!mine || mine.banned) { await loadAll(); return; } setMe(mine); }
+      if (ts) setTasks(ts);
+      if (!w) { await loadAll(); return; } // nouvelle semaine : on la crée
+      if (!quiet()) setWeek(w);
     } catch (e) { /* hors ligne : on réessaiera */ }
   }, [loadAll]);
+
+  // Fait une action sur la semaine : l'écran change tout de suite, puis on enregistre
+  const act = useCallback(async (op, wk) => {
+    const f = famRef.current;
+    if (!f) return false;
+    const cur = weekRef.current;
+    if (cur && (!wk || wk === D.weekId())) { const r = op.run(cur); weekRef.current = r.next; setWeek(r.next); }
+    pending.current++;
+    let ok = true;
+    try { await D.applyOp(f.id, wk || D.weekId(), op, cur); } catch (e) { ok = false; toast(e.message, 'bad'); }
+    pending.current = Math.max(0, pending.current - 1);
+    lastWrite.current = ok ? Date.now() : 0;
+    if (!ok) { refresh(); return false; }
+    if (op.fresh) setTimeout(() => refresh(), 2600);
+    return true;
+  }, [refresh]);
 
   useEffect(() => { loadAll().catch((e) => { toast(e.message, 'bad'); setPhase('offline'); }); }, []);
   // Synchro régulière quand l'appli est ouverte
   useEffect(() => {
     if (phase !== 'main') return;
-    let n = 0;
-    const id = setInterval(() => { n++; refresh(n % 6 === 0); }, 10000);
+    let n = 0; // eslint-disable-line no-unused-vars
+    const id = setInterval(() => { n++; refresh(false); }, 8000);
     const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refresh(true); });
     return () => { clearInterval(id); sub.remove(); };
   }, [phase]);
 
   const logout = async () => { actAs(null); await signOut(); setMe(null); setFam(null); famRef.current = null; setTab('week'); setPhase('auth'); };
-  const isParent = !!(me && me.role === 'parent');
+  const isParent = !!(me && (me.role === 'parent' || D.isAdminUser(me))); // l'admin a les droits d'un parent partout
   const topPad = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) + 8 : isWeb ? 16 : 54;
 
   if (phase === 'load') return <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 56 }}>🧹</Text><ActivityIndicator color={C.green} style={{ marginTop: 16 }} /><StatusBar style="light" /></View>;
@@ -119,13 +146,12 @@ export default function App() {
   const titles = { week: 'Mes tâches', family: 'Famille', tasks: 'Tâches', me: 'Moi', admin: 'Admin' };
   const managedSel = isParent && actingId ? members.find((m) => m.id === actingId && m.managed) : null;
   const actor = managedSel || me;
-  const ctx = { me, actor, actAs, fam, members, tasks, week, setWeek, refresh, isParent, setModal, logout };
+  const ctx = { me, actor, actAs, fam, members, tasks, week, setWeek, refresh, act, isParent, setModal, logout };
   const myStats = week ? D.stats(week, actor.id) : { done: 0, total: 0 };
   const hasManaged = isParent && members.some((m) => m.managed);
   const onDrop = async (d, toUid) => {
     const to = members.find((m) => m.id === toUid);
-    try { const next = await D.moveTask(fam.id, week, d.uid, d.i, toUid); setWeek(next); toast(`${d.t.e} donnée à ${to ? to.name : '…'}`); }
-    catch (e) { toast(e.message, 'bad'); refresh(); }
+    if (await act(D.OPS.move(d.uid, d.t.k, toUid))) toast(`${d.t.e} donnée à ${to ? to.name : '…'}`);
   };
   const left = myStats.total - myStats.done;
 

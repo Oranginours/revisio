@@ -64,7 +64,7 @@ export async function joinFamily(codeTxt) {
 export async function leaveFamily() { await updateMe({ familyId: '', role: '' }); }
 export const getFamily = (fid) => getDoc(`families/${fid}`);
 export const updateFamily = (fid, patch) => updateDoc(`families/${fid}`, patch);
-export const getMembers = async (fid) => (await queryEq('users', 'familyId', fid)).sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'parent' ? -1 : 1));
+export const getMembers = async (fid) => (await queryEq('users', 'familyId', fid)).sort((a, b) => (a.role === b.role ? String(a.name || '').localeCompare(String(b.name || '')) : a.role === 'parent' ? -1 : 1));
 export const setMember = (uid, patch) => updateDoc(`users/${uid}`, patch);
 export async function newCode(fam) {
   let code = makeCode();
@@ -76,22 +76,45 @@ export async function newCode(fam) {
 
 /* ---------- Tâches ---------- */
 export const getTasks = async (fid) => (await listDocs(`families/${fid}/tasks`)).sort((a, b) => (a.created || 0) - (b.created || 0));
-export const addTask = (fid, t) => setDoc(`families/${fid}/tasks/${newId()}`, { emoji: t.emoji || '✨', title: t.title.trim(), info: (t.info || '').trim(), times: Math.max(1, t.times || 1), created: Date.now() });
-export const editTask = (fid, id, t) => updateDoc(`families/${fid}/tasks/${id}`, { emoji: t.emoji, title: t.title.trim(), info: (t.info || '').trim(), times: Math.max(1, t.times || 1) });
+export const addTask = (fid, t) => setDoc(`families/${fid}/tasks/${newId()}`, { emoji: t.emoji || '✨', title: t.title.trim(), info: (t.info || '').trim(), times: Math.max(1, t.times || 1), day: t.day || 0, created: Date.now() });
+export const editTask = (fid, id, t) => updateDoc(`families/${fid}/tasks/${id}`, { emoji: t.emoji, title: t.title.trim(), info: (t.info || '').trim(), times: Math.max(1, t.times || 1), day: t.day || 0 });
 export const removeTask = (fid, id) => deleteDoc(`families/${fid}/tasks/${id}`);
 
-/* ---------- Semaine : répartition ---------- */
+/* ---------- Semaine ----------
+   Chaque tâche distribuée a sa propre clé « k » : les cases cochées, « en cours » et les notes
+   sont rangées sous cette clé. On peut donc retirer, déplacer ou ajouter des tâches sans rien décaler.
+   Les anciennes semaines (sans clé) reçoivent la clé « uid_index », qui était l'ancien système. */
 const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 export const doneKey = (uid, i) => `${uid}_${i}`;
+export const newKey = () => 'k' + newId(10);
+export const DAY_NAMES = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+export const todayNum = () => ((new Date().getDay() + 6) % 7) + 1;
+
+// Ajoute les clés manquantes (anciennes semaines) et repère les tâches en plus
+export function normWeek(w) {
+  if (!w) return w;
+  const assign = {};
+  Object.entries(w.assign || {}).forEach(([u, list]) => {
+    const ex = (w.extra || {})[u] || 0;
+    assign[u] = (list || []).map((it, i) => ({ ...it, k: it.k || doneKey(u, i), x: it.x !== undefined ? it.x : (it.k ? 0 : (i >= (list.length - ex) ? 1 : 0)) }));
+  });
+  return { ...w, assign, done: w.done || {}, doing: w.doing || {}, notes: w.notes || {} };
+}
+export const itemsOf = (week, uid) => ((week && week.assign && week.assign[uid]) || []);
 export function stats(week, uid) {
-  const list = (week && week.assign && week.assign[uid]) || [];
-  const done = list.filter((_, i) => week.done && week.done[doneKey(uid, i)]).length;
+  const list = itemsOf(week, uid);
+  const done = list.filter((it) => week.done && week.done[it.k || '']).length;
   return { total: list.length, done };
 }
 export function familyStats(week) {
   let total = 0, done = 0;
   Object.keys((week && week.assign) || {}).forEach((u) => { const s = stats(week, u); total += s.total; done += s.done; });
   return { total, done };
+}
+export const statusOf = (week, key) => (week && week.done && week.done[key] ? 'done' : week && week.doing && week.doing[key] ? 'doing' : 'todo');
+export function findItem(week, key) {
+  for (const [u, list] of Object.entries((week && week.assign) || {})) { const it = (list || []).find((x) => x.k === key); if (it) return { uid: u, it }; }
+  return null;
 }
 
 // Tâches en plus : pour chaque tâche pas faite la semaine d'avant, +penalty (au maximum penMax)
@@ -100,45 +123,46 @@ export function extrasFrom(prev, fam, uids) {
   uids.forEach((u) => {
     if (!prev || !prev.assign || !prev.assign[u]) { out[u] = 0; return; }
     const s = stats(prev, u);
-    const missed = s.total - s.done;
-    out[u] = Math.min(fam.penMax ?? 3, missed * (fam.penalty ?? 1));
+    out[u] = Math.min(fam.penMax ?? 3, (s.total - s.done) * (fam.penalty ?? 1));
   });
   return out;
 }
+
+const itemOf = (t) => ({ k: newKey(), t: t.id, n: t.title, e: t.emoji, ...(t.day ? { d: t.day } : {}) });
 
 // Répartit les tâches : tout le monde a le même nombre de base, plus ses tâches en plus.
 // hist[u][tâche] = combien de fois la personne l'a eue les semaines d'avant (pour changer chaque semaine)
 export function distribute(tasks, uids, base, extra, hist = {}) {
   const pool0 = [];
-  tasks.forEach((t) => { for (let k = 0; k < (t.times || 1); k++) pool0.push({ t: t.id, n: t.title, e: t.emoji }); });
+  tasks.forEach((t) => { for (let k = 0; k < (t.times || 1); k++) pool0.push(t); });
   if (!pool0.length || !uids.length) return { assign: Object.fromEntries(uids.map((u) => [u, []])), base: 0 };
   const b = base > 0 ? base : Math.max(1, Math.floor(pool0.length / uids.length));
   const need = Object.fromEntries(uids.map((u) => [u, b + (extra[u] || 0)]));
   const assign = Object.fromEntries(uids.map((u) => [u, []]));
   let pool = shuffle(pool0);
-  // Tour par tour : chacun prend une tâche, de préférence une qu'il n'a pas encore
   let guard = 0;
-  while (uids.some((u) => assign[u].length < need[u]) && guard++ < 2000) {
+  while (uids.some((u) => assign[u].length < need[u]) && guard++ < 3000) {
     for (const u of shuffle(uids)) {
       if (assign[u].length >= need[u]) continue;
-      if (!pool.length) pool = shuffle(pool0); // plus de tâches : on en redonne (les tâches en plus peuvent se répéter)
+      if (!pool.length) pool = shuffle(pool0); // plus de tâches : on en redonne
       const mine = new Set(assign[u].map((x) => x.t));
       const h = hist[u] || {};
-      // on choisit la tâche la moins « déjà vue » : pas en double, et pas eue les semaines d'avant
       let k = 0, best = Infinity;
-      pool.forEach((x, j) => { const sc = (mine.has(x.t) ? 100 : 0) + (h[x.t] || 0) * 10 + Math.random() * 3; if (sc < best) { best = sc; k = j; } });
-      assign[u].push(pool.splice(k, 1)[0]);
+      pool.forEach((x, j) => { const sc = (mine.has(x.id) ? 100 : 0) + (h[x.id] || 0) * 10 + Math.random() * 3; if (sc < best) { best = sc; k = j; } });
+      const it = itemOf(pool.splice(k, 1)[0]);
+      if (assign[u].length >= b) it.x = 1; // tâche en plus
+      assign[u].push(it);
     }
   }
   return { assign, base: b };
 }
 
-export const getWeek = (fid, wk) => getDoc(`families/${fid}/weeks/${wk}`);
+export const getWeek = async (fid, wk) => normWeek(await getDoc(`families/${fid}/weeks/${wk}`));
+export const updateWeek = (fid, wk, patch) => updateDoc(`families/${fid}/weeks/${wk}`, patch);
 
 // Crée la semaine si elle n'existe pas encore (le premier qui ouvre l'appli le lundi la crée)
 export async function ensureWeek(fam, members, tasks) {
-  const wk = weekId();
-  const cur = await getWeek(fam.id, wk);
+  const cur = await getWeek(fam.id, weekId());
   if (cur) return cur;
   if (!tasks.length) return null;
   return buildWeek(fam, members, tasks, true);
@@ -146,51 +170,70 @@ export async function ensureWeek(fam, members, tasks) {
 export async function buildWeek(fam, members, tasks, mustNotExist) {
   const wk = weekId();
   const uids = members.filter((m) => m.active !== false).map((m) => m.id);
-  const prev = await getWeek(fam.id, prevWeekId());
-  const d2 = mondayOf(); d2.setDate(d2.getDate() - 10);
-  const prev2 = await getWeek(fam.id, weekId(d2)).catch(() => null);
+  const prev = await getWeek(fam.id, prevWeekId()).catch(() => null);
+  const prev2 = await getWeek(fam.id, weekIdOffset(-2)).catch(() => null);
+  const cur = mustNotExist ? null : await getWeek(fam.id, wk).catch(() => null);
   const extra = extrasFrom(prev, fam, uids);
   const hist = {};
-  const cur = mustNotExist ? null : await getWeek(fam.id, wk).catch(() => null);
   [[cur, 3], [prev, 2], [prev2, 1]].forEach(([w, wt]) => {
     if (!w || !w.assign) return;
     Object.entries(w.assign).forEach(([u, list]) => { hist[u] = hist[u] || {}; (list || []).forEach((x) => { hist[u][x.t] = (hist[u][x.t] || 0) + wt; }); });
   });
-  // si on refait la répartition en cours de semaine, on évite aussi ce qu'on avait déjà
   const { assign, base } = distribute(tasks, uids, fam.perPerson || 0, extra, hist);
   const doc = { assign, done: {}, doing: {}, notes: {}, extra, base, created: Date.now(), by: currentUid() };
   try {
-    return await setDoc(`families/${fam.id}/weeks/${wk}`, doc, mustNotExist);
+    return normWeek(await setDoc(`families/${fam.id}/weeks/${wk}`, doc, mustNotExist));
   } catch (e) {
-    if (mustNotExist && (e.status === 400 || e.status === 409 || /exist/i.test(e.message))) return getWeek(fam.id, wk); // quelqu'un l'a créée en même temps
+    if (mustNotExist && (e.status === 400 || e.status === 409 || /exist/i.test(e.message))) return getWeek(fam.id, wk);
     throw e;
   }
 }
-export async function setDone(fid, uid, i, on) {
-  const k = doneKey(uid, i);
-  return updateDoc(`families/${fid}/weeks/${weekId()}`, { ['done.' + k]: on ? Date.now() : undefined, ['doing.' + k]: undefined });
-}
-// « En cours » : visible par toute la famille
-export async function setDoing(fid, uid, i, on, who) {
-  const k = doneKey(uid, i);
-  return updateDoc(`families/${fid}/weeks/${weekId()}`, { ['doing.' + k]: on ? { ts: Date.now(), by: who } : undefined, ['done.' + k]: undefined });
-}
-// Notes sur une tâche de la semaine (tout le monde les voit)
-export async function addNote(fid, week, key, me, text) {
-  const list = ((week.notes || {})[key] || []).concat([{ u: me.id, n: me.name, a: me.avatar || '', t: text.trim(), ts: Date.now() }]);
-  await updateDoc(`families/${fid}/weeks/${weekId()}`, { ['notes.' + key]: list });
-  return list;
-}
-export async function removeNote(fid, week, key, ts) {
-  const list = ((week.notes || {})[key] || []).filter((x) => x.ts !== ts);
-  await updateDoc(`families/${fid}/weeks/${weekId()}`, { ['notes.' + key]: list.length ? list : undefined });
-  return list;
-}
-export const statusOf = (week, key) => (week && week.done && week.done[key] ? 'done' : week && week.doing && week.doing[key] ? 'doing' : 'todo');
-// Ajoute une tâche à quelqu'un en cours de semaine (parents)
-export async function giveTask(fid, week, uid, task) {
-  const list = ((week.assign || {})[uid] || []).concat([{ t: task.id, n: task.title, e: task.emoji }]);
-  return updateDoc(`families/${fid}/weeks/${weekId()}`, { ['assign.' + uid]: list });
+
+/* ---------- Opérations sur une semaine ----------
+   Chaque opération prend la semaine et renvoie { next, patch } :
+   - next : la semaine modifiée (pour l'écran, tout de suite)
+   - patch : ce qu'il faut écrire dans la base
+   « fresh: true » = l'opération touche une liste : on relit la semaine juste avant d'écrire. */
+const cloneW = (w) => ({ ...w, assign: { ...(w.assign || {}) }, done: { ...(w.done || {}) }, doing: { ...(w.doing || {}) }, notes: { ...(w.notes || {}) }, extra: { ...(w.extra || {}) } });
+export const OPS = {
+  done: (k, on) => ({ fresh: false, run: (w) => { const n = cloneW(w); if (on) n.done[k] = Date.now(); else delete n.done[k]; delete n.doing[k]; return { next: n, patch: { ['done.' + k]: on ? n.done[k] : undefined, ['doing.' + k]: undefined } }; } }),
+  doing: (k, on, who) => ({ fresh: false, run: (w) => { const n = cloneW(w); const v = on ? { ts: Date.now(), by: who } : undefined; if (v) n.doing[k] = v; else delete n.doing[k]; delete n.done[k]; return { next: n, patch: { ['doing.' + k]: v, ['done.' + k]: undefined } }; } }),
+  addNote: (k, note) => ({ fresh: true, run: (w) => { const n = cloneW(w); n.notes[k] = (n.notes[k] || []).concat([note]); return { next: n, patch: { ['notes.' + k]: n.notes[k] } }; } }),
+  delNote: (k, ts) => ({ fresh: true, run: (w) => { const n = cloneW(w); const l = (n.notes[k] || []).filter((x) => x.ts !== ts); if (l.length) n.notes[k] = l; else delete n.notes[k]; return { next: n, patch: { ['notes.' + k]: l.length ? l : undefined } }; } }),
+  give: (uid, task, isExtra) => {
+    const it = { ...itemOf(task), ...(isExtra ? { x: 1 } : {}) };
+    return { fresh: true, run: (w) => { const n = cloneW(w); n.assign[uid] = itemsOf(w, uid).concat([it]); return { next: n, patch: { ['assign.' + uid]: n.assign[uid] } }; } };
+  },
+  remove: (uid, k) => ({ fresh: true, run: (w) => {
+    const n = cloneW(w);
+    const old = itemsOf(w, uid);
+    const it = old.find((x) => x.k === k);
+    n.assign[uid] = old.filter((x) => x.k !== k);
+    delete n.done[k]; delete n.doing[k]; delete n.notes[k];
+    const patch = { ['assign.' + uid]: n.assign[uid], ['done.' + k]: undefined, ['doing.' + k]: undefined, ['notes.' + k]: undefined };
+    if (it && it.x && n.extra[uid]) { n.extra[uid] -= 1; patch['extra.' + uid] = n.extra[uid]; }
+    return { next: n, patch };
+  } }),
+  move: (from, k, to) => ({ fresh: true, run: (w) => {
+    const n = cloneW(w);
+    const src = itemsOf(w, from);
+    const it = src.find((x) => x.k === k);
+    if (!it || from === to) return { next: w, patch: {} };
+    n.assign[from] = src.filter((x) => x.k !== k);
+    const moved = { ...it }; delete moved.x;
+    n.assign[to] = itemsOf(w, to).concat([moved]);
+    const patch = { ['assign.' + from]: n.assign[from], ['assign.' + to]: n.assign[to] };
+    if (it.x && n.extra[from]) { n.extra[from] -= 1; patch['extra.' + from] = n.extra[from]; }
+    return { next: n, patch };
+  } }),
+};
+// Applique une opération dans la base (en relisant la semaine si besoin)
+export async function applyOp(fid, wk, op, current) {
+  const base = op.fresh ? (await getWeek(fid, wk)) : current;
+  if (!base) throw new Error("Cette semaine n'existe pas.");
+  const { next, patch } = op.run(base);
+  if (Object.keys(patch).length) await updateWeek(fid, wk, patch);
+  return next;
 }
 
 /* ---------- Compte : suppression ---------- */
@@ -232,18 +275,21 @@ export async function createManaged(fid, { name, avatar, color }) {
 export const updateManaged = (id, patch) => updateDoc(`users/${id}`, patch);
 export const deleteManaged = (id) => deleteDoc(`users/${id}`);
 
-/* ---------- Admin : semaines passées ---------- */
-export const weekIdOffset = (n) => { const d = mondayOf(); d.setDate(d.getDate() + 7 * n + 3); return weekId(d); };
+/* ---------- Semaines passées / historique ---------- */
+export function weekIdOffset(n) { const d = mondayOf(); d.setDate(d.getDate() + 7 * n + 3); return weekId(d); }
 export function weekLabel(n) {
   const d = mondayOf(); d.setDate(d.getDate() + 7 * n);
   const e = new Date(d); e.setDate(e.getDate() + 6);
   const f = (x) => `${x.getDate()}/${x.getMonth() + 1}`;
   return n === 0 ? `Cette semaine (${f(d)} → ${f(e)})` : n === -1 ? `Semaine dernière (${f(d)} → ${f(e)})` : `Du ${f(d)} au ${f(e)}`;
 }
-export async function setDoneIn(fid, wk, uid, i, on) {
-  const k = doneKey(uid, i);
-  return updateDoc(`families/${fid}/weeks/${wk}`, { ['done.' + k]: on ? Date.now() : undefined, ['doing.' + k]: undefined });
+export const shortWeek = (n) => { const d = mondayOf(); d.setDate(d.getDate() + 7 * n); return `${d.getDate()}/${d.getMonth() + 1}`; };
+// Les n dernières semaines (la plus ancienne d'abord)
+export async function history(fid, n = 6) {
+  const ids = []; for (let i = n - 1; i >= 0; i--) ids.push(-i);
+  return Promise.all(ids.map(async (o) => ({ o, w: await getWeek(fid, weekIdOffset(o)).catch(() => null) })));
 }
+
 // Recalcule les tâches en plus de cette semaine d'après la semaine dernière (après avoir corrigé des cases)
 export async function recomputeExtras(fam, tasks) {
   const wk = weekId();
@@ -255,98 +301,44 @@ export async function recomputeExtras(fam, tasks) {
   const patch = {};
   let changed = 0;
   uids.forEach((u) => {
-    const had = (cur.extra || {})[u] || 0, need = want[u] || 0;
+    let list = itemsOf(cur, u).slice();
+    const had = list.filter((x) => x.x).length, need = want[u] || 0;
     if (had === need) return;
-    let list = (cur.assign[u] || []).slice();
     if (need < had) {
-      const cut = Math.min(had - need, list.length);
-      for (let i = list.length - cut; i < list.length; i++) {
-        const k = doneKey(u, i);
-        if (cur.done && cur.done[k]) patch['done.' + k] = undefined;
-        if (cur.doing && cur.doing[k]) patch['doing.' + k] = undefined;
-        if (cur.notes && cur.notes[k]) patch['notes.' + k] = undefined;
-      }
-      list = list.slice(0, list.length - cut);
+      // on retire d'abord les tâches en plus pas encore faites
+      let cut = had - need;
+      const order = list.map((x, i) => ({ x, i })).filter((o) => o.x.x).sort((a, b) => (cur.done[a.x.k] ? 1 : 0) - (cur.done[b.x.k] ? 1 : 0));
+      const drop = new Set(order.slice(0, cut).map((o) => o.x.k));
+      drop.forEach((k) => { patch['done.' + k] = undefined; patch['doing.' + k] = undefined; patch['notes.' + k] = undefined; });
+      list = list.filter((x) => !drop.has(x.k));
     } else if (tasks.length) {
       const mine = new Set(list.map((x) => x.t));
       const pool = shuffle(tasks).sort((a, b) => (mine.has(a.id) ? 1 : 0) - (mine.has(b.id) ? 1 : 0));
-      for (let j = 0; j < need - had; j++) { const t = pool[j % pool.length]; list.push({ t: t.id, n: t.title, e: t.emoji }); }
+      for (let j = 0; j < need - had; j++) list.push({ ...itemOf(pool[j % pool.length]), x: 1 });
     }
     patch['assign.' + u] = list;
     patch['extra.' + u] = need;
     changed++;
   });
-  if (changed) await updateDoc(`families/${fam.id}/weeks/${wk}`, patch);
+  if (changed) await updateWeek(fam.id, wk, patch);
   return changed;
 }
 
-// Ajoute une tâche à quelqu'un pour une semaine donnée (admin)
-export async function giveTaskIn(fid, wk, week, uid, task) {
-  const list = ((week.assign || {})[uid] || []).concat([{ t: task.id, n: task.title, e: task.emoji }]);
-  await updateDoc(`families/${fid}/weeks/${wk}`, { ['assign.' + uid]: list });
-  return list;
-}
-// Retire une tâche (la dernière seulement, pour ne pas décaler les cases cochées)
-export async function removeLastTaskIn(fid, wk, week, uid) {
-  const list = ((week.assign || {})[uid] || []).slice();
-  if (!list.length) return list;
-  const i = list.length - 1, k = doneKey(uid, i);
-  list.pop();
-  await updateDoc(`families/${fid}/weeks/${wk}`, { ['assign.' + uid]: list, ['done.' + k]: undefined, ['doing.' + k]: undefined, ['notes.' + k]: undefined });
-  return list;
-}
+/* ---------- Annonce (« réunion d'urgence ») ---------- */
+export const setAnnounce = (fid, a) => updateFamily(fid, { announce: a || null });
 
-// Retire n'importe quelle tâche d'une personne (les cases cochées, « en cours » et notes suivent)
-export async function removeTaskAt(fid, wk, week, uid, i) {
-  const old = ((week.assign || {})[uid] || []).slice();
-  if (i < 0 || i >= old.length) return week;
-  const list = old.filter((_, j) => j !== i);
-  const patch = { ['assign.' + uid]: list };
-  const next = { ...week, assign: { ...week.assign, [uid]: list } };
-  ['done', 'doing', 'notes'].forEach((f) => {
-    const m = { ...(week[f] || {}) };
-    for (let j = i; j < old.length; j++) {
-      const v = j + 1 < old.length ? m[doneKey(uid, j + 1)] : undefined;
-      if (v !== m[doneKey(uid, j)] || j === old.length - 1) patch[f + '.' + doneKey(uid, j)] = v;
-    }
-    for (let j = i; j < old.length; j++) m[doneKey(uid, j)] = j + 1 < old.length ? (week[f] || {})[doneKey(uid, j + 1)] : undefined;
-    next[f] = m;
-  });
-  const ex = (week.extra || {})[uid] || 0;
-  if (ex && i >= old.length - ex) { patch['extra.' + uid] = ex - 1; next.extra = { ...(week.extra || {}), [uid]: ex - 1 }; }
-  await updateDoc(`families/${fid}/weeks/${wk}`, patch);
-  return next;
+/* ---------- Fil d'activité ---------- */
+export function activity(week, members, max = 25) {
+  if (!week) return [];
+  const who = (u) => members.find((m) => m.id === u) || { name: '?', avatar: '🙂' };
+  const ev = [];
+  Object.entries(week.assign || {}).forEach(([u, list]) => (list || []).forEach((it) => {
+    const d = week.done[it.k];
+    if (d) ev.push({ ts: d, m: who(u), txt: `a fait ${it.e} ${it.n}`, kind: 'done' });
+    const g = week.doing[it.k];
+    if (g && g.ts) ev.push({ ts: g.ts, m: who(u), txt: `a commencé ${it.e} ${it.n}`, kind: 'doing' });
+    (week.notes[it.k] || []).forEach((n) => ev.push({ ts: n.ts, m: { name: n.n, avatar: n.a, color: (who(n.u) || {}).color }, txt: `💬 « ${n.t} » (${it.e} ${it.n})`, kind: 'note' }));
+  }));
+  return ev.sort((a, b) => b.ts - a.ts).slice(0, max);
 }
-
-// Déplace une tâche d'une personne à une autre (statut et notes suivent la tâche)
-export async function moveTask(fid, week, fromUid, i, toUid) {
-  if (fromUid === toUid) return week;
-  const from = ((week.assign || {})[fromUid] || []).slice();
-  if (i < 0 || i >= from.length) return week;
-  const task = from[i];
-  const to = ((week.assign || {})[toUid] || []).slice();
-  const j = to.length;
-  const patch = {};
-  const next = { ...week, assign: { ...week.assign } };
-  // 1) on retire chez « from » en décalant les cases suivantes
-  const rest = from.filter((_, x) => x !== i);
-  patch['assign.' + fromUid] = rest; next.assign[fromUid] = rest;
-  ['done', 'doing', 'notes'].forEach((f) => {
-    const src = week[f] || {};
-    const m = { ...src };
-    const moved = src[doneKey(fromUid, i)];
-    for (let x = i; x < from.length; x++) {
-      const v = x + 1 < from.length ? src[doneKey(fromUid, x + 1)] : undefined;
-      patch[f + '.' + doneKey(fromUid, x)] = v; m[doneKey(fromUid, x)] = v;
-    }
-    // 2) on l'ajoute chez « to » avec son statut et ses notes
-    patch[f + '.' + doneKey(toUid, j)] = moved; m[doneKey(toUid, j)] = moved;
-    next[f] = m;
-  });
-  const toList = to.concat([task]);
-  patch['assign.' + toUid] = toList; next.assign[toUid] = toList;
-  const ex = (week.extra || {})[fromUid] || 0;
-  if (ex && i >= from.length - ex) { patch['extra.' + fromUid] = ex - 1; next.extra = { ...(week.extra || {}), [fromUid]: ex - 1 }; }
-  await updateDoc(`families/${fid}/weeks/${weekId()}`, patch);
-  return next;
-}
+export const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? "à l'instant" : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };

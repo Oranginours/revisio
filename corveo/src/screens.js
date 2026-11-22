@@ -1,6 +1,7 @@
 // Écrans de Corvéo.
 import React, { useState, useContext, createContext } from 'react';
-import { View, Text, Pressable, Share, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Share, ScrollView, Switch, ActivityIndicator, Animated, Easing } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, Txt, H1, H2, Label, Card, Row, Btn, Input, Err, Stepper, TaskBar, Avatar, Chip, Pop, toast, ask, isWeb } from './ui';
 import * as D from './data';
 import { NewTaskQuick } from './admin';
@@ -143,10 +144,25 @@ export function NoFamily({ me, reload, admin }) {
    ========================================================= */
 const DAYS = ['', 'dernier jour !', '2 jours', '3 jours', '4 jours', '5 jours', '6 jours', '7 jours'];
 
+// Ordre d'affichage : à faire d'abord (celles du jour en tête), puis en cours, puis faites
+function sortItems(week, list) {
+  const td = D.todayNum();
+  const rank = (it) => {
+    const st = D.statusOf(week, it.k);
+    if (st === 'done') return 90;
+    if (it.d && it.d < td) return 0; // en retard
+    if (it.d === td) return 1;
+    if (st === 'doing') return 2;
+    if (!it.d) return 3;
+    return 4 + it.d;
+  };
+  return list.slice().sort((a, b) => rank(a) - rank(b));
+}
+
 export function WeekScreen() {
-  const { actor: me, fam, members, week, tasks, refresh, setWeek, isParent, setModal } = useCtx();
-  const [pop, setPop] = useState(0);
-  if (!tasks.length) {
+  const { actor: me, fam, members, week, tasks, isParent, setModal, act } = useCtx();
+  const [party, setParty] = useState(0);
+  if (!tasks.length && !week) {
     return (
       <Card>
         <H2>Aucune tâche pour l'instant</H2>
@@ -156,28 +172,26 @@ export function WeekScreen() {
   }
   if (!week) return <ActivityIndicator color={C.green} style={{ marginTop: 40 }} />;
   const uid = me.id;
-  const mine = (week.assign && week.assign[uid]) || [];
+  const mine = sortItems(week, D.itemsOf(week, uid));
   const fs = D.familyStats(week), ms = D.stats(week, uid);
-  const extra = (week.extra && week.extra[uid]) || 0;
+  const extra = mine.filter((x) => x.x).length;
   const allDone = ms.total > 0 && ms.done === ms.total;
+  const famDone = fs.total > 0 && fs.done === fs.total;
   const dl = D.daysLeft();
 
-  const toggle = async (i) => {
-    const key = D.doneKey(uid, i);
-    const on = !(week.done && week.done[key]);
-    // on coche tout de suite à l'écran, puis on enregistre
-    setWeek({ ...week, done: { ...(week.done || {}), [key]: on ? Date.now() : undefined }, doing: { ...(week.doing || {}), [key]: undefined } });
-    if (on) setPop((p) => p + 1);
-    try { await D.setDone(fam.id, uid, i, on); if (on && ms.done + 1 === ms.total) toast('🎉 Toutes tes tâches sont faites !'); }
-    catch (e) { toast(e.message, 'bad'); refresh(); }
+  const toggle = async (it) => {
+    const on = D.statusOf(week, it.k) !== 'done';
+    if (on && ms.done + 1 === ms.total) { setParty((p) => p + 1); toast('🎉 Toutes tes tâches sont faites !'); }
+    await act(D.OPS.done(it.k, on));
   };
 
   return (
     <View>
+      <Announce />
       <Card style={{ backgroundColor: '#141A28', borderColor: '#000', borderWidth: 2 }}>
         <TaskBar label="TÂCHES DE LA FAMILLE" done={fs.done} total={fs.total} />
-        <TaskBar label="MES TÂCHES" done={ms.done} total={ms.total} />
-        <Txt muted style={{ fontSize: 13 }}>{dl === 1 ? '⏰ Dernier jour de la semaine !' : `⏳ Encore ${DAYS[dl]} avant lundi`}</Txt>
+        <TaskBar label={me.id === currentUid() ? 'MES TÂCHES' : `TÂCHES DE ${String(me.name).toUpperCase()}`} done={ms.done} total={ms.total} />
+        <Txt muted style={{ fontSize: 13 }}>{famDone ? '🏆 Toute la famille a fini ! Victoire !' : dl === 1 ? '⏰ Dernier jour de la semaine !' : `⏳ Encore ${DAYS[dl]} avant lundi`}</Txt>
       </Card>
 
       {extra > 0 && (
@@ -188,79 +202,97 @@ export function WeekScreen() {
       )}
 
       {allDone && (
-        <Pop trigger={pop}>
+        <Pop trigger={party}>
           <View style={{ backgroundColor: '#14301A', borderRadius: 20, padding: 18, marginBottom: 12, alignItems: 'center', borderWidth: 2, borderColor: C.green }}>
             <Text style={{ fontSize: 40 }}>🏆</Text>
             <Text style={{ color: C.green, fontWeight: '900', fontSize: 20 }}>TÂCHES TERMINÉES !</Text>
-            <Txt muted center>Bien joué {me.name}, tu as fait ta part cette semaine.</Txt>
+            <Txt muted center>Bien joué {me.name}, {me.id === currentUid() ? 'tu as fait ta part' : 'sa part est faite'} cette semaine.</Txt>
           </View>
         </Pop>
       )}
 
-      <H2>Mes tâches</H2>
-      {mine.length === 0 && <Txt muted>Rien pour toi cette semaine.</Txt>}
-      {mine.map((t, i) => {
-        const k = D.doneKey(uid, i);
-        return (
-          <Draggable key={i} uid={uid} i={i} t={t} enabled={isParent}>
-            <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
-              onPress={() => setModal(<TaskSheet uid={uid} i={i} />)} onCheck={() => toggle(i)} extra={i >= mine.length - extra} />
-          </Draggable>
-        );
-      })}
-      {mine.length > 0 && <Txt muted style={{ fontSize: 12, marginTop: 2 }}>Touche une tâche pour dire qu'elle est en cours ou ajouter une note.{isParent ? ' Appui long pour la glisser chez quelqu\'un d\'autre.' : ''}</Txt>}
+      <H2>{me.id === currentUid() ? 'Mes tâches' : `Tâches de ${me.name}`}</H2>
+      {mine.length === 0 && <Txt muted>Rien cette semaine.</Txt>}
+      {mine.map((it) => (
+        <Draggable key={it.k} uid={uid} t={it} enabled={isParent}>
+          <TaskRow it={it} week={week} onToggle={() => toggle(it)} onOpen={() => setModal(<TaskSheet uid={uid} k={it.k} />)} />
+        </Draggable>
+      ))}
+      {mine.length > 0 && <Txt muted style={{ fontSize: 12, marginTop: 2 }}>Touche une tâche pour la cocher. Touche ⋯ pour « en cours » ou les notes.{isParent ? ' Appui long pour la glisser chez quelqu\'un d\'autre.' : ''}</Txt>}
       <Others members={members} week={week} />
+      <Confetti trigger={party} />
     </View>
   );
 }
 
-export function TaskRow({ t, status, notes, onPress, onCheck, extra, who, onLongPress, onPressOut, delayLongPress }) {
+// Une tâche : on touche = cocher (si on a le droit), ⋯ = la fiche (en cours, notes)
+export function TaskRow({ it, week, onToggle, onOpen, onLongPress, onPressOut, delayLongPress, compact }) {
+  const status = D.statusOf(week, it.k);
   const done = status === 'done', doing = status === 'doing';
+  const notes = ((week.notes || {})[it.k] || []).length;
+  const td = D.todayNum();
+  const late = it.d && it.d < td && !done, today = it.d === td && !done;
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut} delayLongPress={delayLongPress}
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-      <Text style={{ fontSize: 26 }}>{t.e || '✨'}</Text>
+    <Pressable onPress={onToggle || onOpen} onLongPress={onLongPress || onOpen} onPressOut={onPressOut} delayLongPress={delayLongPress || 400}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: compact ? 10 : 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : today ? C.blue : late ? '#7F1D1D' : C.line, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+      <Text style={{ fontSize: compact ? 22 : 26 }}>{it.e || '✨'}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: done ? C.muted : C.ink, fontSize: 16, fontWeight: '800', textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
-          {who ? <Text style={{ color: C.muted, fontSize: 12, fontWeight: '700' }}>{who}</Text> : null}
-          {doing && <Text style={{ color: C.yellow, fontSize: 12, fontWeight: '900' }}>⏳ EN COURS</Text>}
-          {extra && !done && <Text style={{ color: '#FCA5A5', fontSize: 12, fontWeight: '700' }}>tâche en plus</Text>}
-          {notes > 0 && <Text style={{ color: C.blue, fontSize: 12, fontWeight: '800' }}>💬 {notes}</Text>}
-        </View>
+        <Text style={{ color: done ? C.muted : C.ink, fontSize: compact ? 15 : 16, fontWeight: '800', textDecorationLine: done ? 'line-through' : 'none' }}>{it.n}</Text>
+        {(doing || it.x || notes > 0 || it.d) ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+            {doing && <Text style={{ color: C.yellow, fontSize: 12, fontWeight: '900' }}>⏳ EN COURS</Text>}
+            {!!it.d && !done && <Text style={{ color: late ? '#FCA5A5' : today ? C.blue : C.muted, fontSize: 12, fontWeight: '800' }}>📅 {today ? "Aujourd'hui" : late ? `${D.DAY_NAMES[it.d]} (en retard)` : D.DAY_NAMES[it.d]}</Text>}
+            {!!it.x && !done && <Text style={{ color: '#FCA5A5', fontSize: 12, fontWeight: '700' }}>tâche en plus</Text>}
+            {notes > 0 && <Text style={{ color: C.blue, fontSize: 12, fontWeight: '800' }}>💬 {notes}</Text>}
+          </View>
+        ) : null}
       </View>
-      {onCheck ? (
-        <Pressable onPress={onCheck} hitSlop={10}>
-          <Pop trigger={done}>
-            <View style={{ width: 34, height: 34, borderRadius: 10, borderWidth: 3, borderColor: done ? C.green : doing ? C.yellow : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-              {done ? <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 18 }}>✓</Text> : doing ? <Text style={{ fontSize: 14 }}>⏳</Text> : null}
-            </View>
-          </Pop>
+      {onOpen && (
+        <Pressable onPress={onOpen} hitSlop={10} style={({ pressed }) => ({ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? C.card2 : 'transparent' })}>
+          <Text style={{ color: C.muted, fontSize: 20, fontWeight: '900' }}>⋯</Text>
         </Pressable>
-      ) : (
-        <Text style={{ fontSize: 20 }}>{done ? '✅' : doing ? '⏳' : '⬜'}</Text>
       )}
+      <Pop trigger={done}>
+        <View style={{ width: 34, height: 34, borderRadius: 10, borderWidth: 3, borderColor: done ? C.green : doing ? C.yellow : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center', opacity: onToggle ? 1 : 0.5 }}>
+          {done ? <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 18 }}>✓</Text> : doing ? <Text style={{ fontSize: 14 }}>⏳</Text> : null}
+        </View>
+      </Pop>
     </Pressable>
   );
 }
 
+// Liste des tâches de quelqu'un (pour les autres, le classement, la fiche membre)
+function PersonTasks({ m, week, compact }) {
+  const { isParent, actor, setModal, act } = useCtx();
+  const can = isParent || m.id === actor.id;
+  return sortItems(week, D.itemsOf(week, m.id)).map((it) => (
+    <Draggable key={it.k} uid={m.id} t={it} enabled={isParent}>
+      <TaskRow it={it} week={week} compact={compact}
+        onToggle={can ? () => act(D.OPS.done(it.k, D.statusOf(week, it.k) !== 'done')) : null}
+        onOpen={() => setModal(<TaskSheet uid={m.id} k={it.k} />)} />
+    </Draggable>
+  ));
+}
+
 // Les tâches des autres : on voit qui fait quoi, ce qui est en cours, et les notes
 function Others({ members, week }) {
-  const { setModal, actor, isParent } = useCtx();
-  const [open, setOpen] = useState(null);
-  const list = members.filter((m) => week.assign && week.assign[m.id] && m.id !== actor.id);
+  const { actor, isParent } = useCtx();
+  const [open, setOpen] = useState(isParent ? 'all' : null);
+  const list = members.filter((m) => D.itemsOf(week, m.id).length && m.id !== actor.id);
   if (!list.length) return null;
   return (
     <View style={{ marginTop: 16 }}>
-      <H2>Les autres</H2>
+      <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <H2 style={{ marginBottom: 0 }}>Les autres</H2>
+        <Pressable onPress={() => setOpen(open === 'all' ? null : 'all')} hitSlop={8}><Text style={{ color: C.green, fontWeight: '800' }}>{open === 'all' ? 'Tout replier' : 'Tout voir'}</Text></Pressable>
+      </Row>
       {list.map((m) => {
         const s = D.stats(week, m.id);
-        const tasks = week.assign[m.id] || [];
-        const doing = tasks.filter((_, i) => D.statusOf(week, D.doneKey(m.id, i)) === 'doing').length;
-        const isOpen = open === m.id;
+        const doing = D.itemsOf(week, m.id).filter((it) => D.statusOf(week, it.k) === 'doing').length;
+        const isOpen = open === 'all' || open === m.id;
         return (
-          <View key={m.id} style={{ marginBottom: 10 }}>
-            <Pressable onPress={() => setOpen(isOpen ? null : m.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View key={m.id} style={{ marginBottom: 12 }}>
+            <Pressable onPress={() => setOpen(isOpen ? (open === 'all' ? null : null) : m.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Avatar m={m} size={34} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: C.ink, fontWeight: '800', marginBottom: 3 }}>{m.name}{s.total && s.done === s.total ? ' ✅' : ''}{doing ? `  ·  ⏳ ${doing} en cours` : ''}</Text>
@@ -268,18 +300,7 @@ function Others({ members, week }) {
               </View>
               <Text style={{ color: C.muted, fontSize: 16 }}>{isOpen ? '▾' : '▸'}</Text>
             </Pressable>
-            {isOpen && (
-              <View style={{ marginTop: 8, marginLeft: 8 }}>
-                {tasks.map((t, i) => {
-                  const k = D.doneKey(m.id, i);
-                  return (
-                    <Draggable key={i} uid={m.id} i={i} t={t} enabled={isParent}>
-                      <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length} onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)} />
-                    </Draggable>
-                  );
-                })}
-              </View>
-            )}
+            {isOpen && <View style={{ marginTop: 8, marginLeft: 8 }}><PersonTasks m={m} week={week} compact /></View>}
           </View>
         );
       })}
@@ -287,50 +308,36 @@ function Others({ members, week }) {
   );
 }
 
-// Fiche d'une tâche : statut (à faire / en cours / faite) et notes visibles par tous
-export function TaskSheet({ uid, i }) {
-  const { actor: me, fam, week, setWeek, members, tasks, isParent, setModal, refresh } = useCtx();
+// Fiche d'une tâche : statut (à faire / en cours / faite), notes, et pour les parents : donner / retirer
+export function TaskSheet({ uid, k }) {
+  const { actor: me, week, members, tasks, isParent, setModal, act } = useCtx();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!week || !week.assign || !week.assign[uid] || !week.assign[uid][i]) return <Txt muted>Cette tâche n'existe plus.</Txt>;
-  const t = week.assign[uid][i];
-  const k = D.doneKey(uid, i);
+  const found = week && D.findItem(week, k);
+  if (!found) return <View><Txt muted>Cette tâche n'existe plus.</Txt><Btn kind="ghost" label="Fermer" style={{ marginTop: 10 }} onPress={() => setModal(null)} /></View>;
+  const t = found.it, owner = members.find((m) => m.id === found.uid) || { name: '?' };
   const status = D.statusOf(week, k);
-  const owner = members.find((m) => m.id === uid) || { name: '?' };
-  const mine = uid === me.id;
+  const mine = found.uid === me.id;
   const canEdit = mine || isParent;
   const info = (tasks.find((x) => x.id === t.t) || {}).info;
   const notes = (week.notes || {})[k] || [];
   const doingBy = week.doing && week.doing[k] && week.doing[k].by;
 
   const setStatus = async (st) => {
-    if (busy || st === status) return;
-    setBusy(true);
-    const next = { ...week, done: { ...(week.done || {}) }, doing: { ...(week.doing || {}) } };
-    next.done[k] = st === 'done' ? Date.now() : undefined;
-    next.doing[k] = st === 'doing' ? { ts: Date.now(), by: me.name } : undefined;
-    setWeek(next);
-    try {
-      if (st === 'doing') await D.setDoing(fam.id, uid, i, true, me.name);
-      else if (st === 'done') await D.setDone(fam.id, uid, i, true);
-      else await D.setDone(fam.id, uid, i, false);
-      if (st === 'done') toast('✅ Tâche faite !');
-    } catch (e) { toast(e.message, 'bad'); refresh(); }
-    setBusy(false);
+    if (st === status) return;
+    if (st === 'doing') await act(D.OPS.doing(k, true, me.name));
+    else await act(D.OPS.done(k, st === 'done'));
+    if (st === 'done') toast('✅ Tâche faite !');
   };
   const send = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || busy) return;
     setBusy(true);
-    try { const list = await D.addNote(fam.id, week, k, me, text); setWeek({ ...week, notes: { ...(week.notes || {}), [k]: list } }); setText(''); }
-    catch (e) { toast(e.message, 'bad'); }
+    const ok = await act(D.OPS.addNote(k, { u: me.id, n: me.name, a: me.avatar || '', t: text.trim(), ts: Date.now() }));
+    if (ok) setText('');
     setBusy(false);
   };
-  const del = async (ts) => {
-    try { const list = await D.removeNote(fam.id, week, k, ts); setWeek({ ...week, notes: { ...(week.notes || {}), [k]: list.length ? list : undefined } }); }
-    catch (e) { toast(e.message, 'bad'); }
-  };
-  const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? "à l'instant" : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
   const ST = [['todo', '⬜ À faire', C.card2], ['doing', '⏳ En cours', '#A16207'], ['done', '✅ Faite', C.greenDark]];
+  const others = members.filter((m) => m.id !== found.uid && m.active !== false);
 
   return (
     <View>
@@ -338,7 +345,7 @@ export function TaskSheet({ uid, i }) {
         <Text style={{ fontSize: 40 }}>{t.e || '✨'}</Text>
         <View style={{ flex: 1 }}>
           <H2 style={{ marginBottom: 0 }}>{t.n}</H2>
-          <Txt muted>{mine ? 'Ta tâche' : `Tâche de ${owner.name}`}{status === 'doing' && doingBy ? ` · lancée par ${doingBy}` : ''}</Txt>
+          <Txt muted>{mine ? (me.id === currentUid() ? 'Ta tâche' : `Tâche de ${me.name}`) : `Tâche de ${owner.name}`}{t.d ? ` · 📅 ${D.DAY_NAMES[t.d]}` : ''}{status === 'doing' && doingBy ? ` · lancée par ${doingBy}` : ''}</Txt>
         </View>
       </Row>
       {!!info && <View style={{ backgroundColor: C.bg, borderRadius: 14, padding: 12, marginTop: 6 }}><Txt muted bold style={{ fontSize: 12 }}>📌 CONSIGNES</Txt><Txt>{info}</Txt></View>}
@@ -357,24 +364,106 @@ export function TaskSheet({ uid, i }) {
       </View>
       {!canEdit && <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Seul {owner.name} ou un parent peut changer le statut.</Txt>}
 
+      {isParent && (
+        <View>
+          <Label>Donner cette tâche à</Label>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {others.map((m) => (
+              <Pressable key={m.id} onPress={async () => { setModal(null); if (await act(D.OPS.move(found.uid, k, m.id))) toast(`${t.e} donnée à ${m.name}`); }}
+                style={({ pressed }) => ({ alignItems: 'center', width: 64, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+                <Avatar m={m} size={40} />
+                <Text numberOfLines={1} style={{ color: C.ink, fontSize: 12, fontWeight: '700', marginTop: 3 }}>{m.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
       <Label>Notes ({notes.length})</Label>
       {notes.length === 0 && <Txt muted>Pas encore de note. Ex. « plus de liquide vaisselle », « je la fais ce soir ».</Txt>}
       {notes.map((n) => (
         <View key={n.ts} style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
           <Text style={{ fontSize: 22 }}>{n.a || '💬'}</Text>
           <View style={{ flex: 1, backgroundColor: C.bg, borderRadius: 14, padding: 10 }}>
-            <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800' }}>{n.n} · {ago(n.ts)}</Text>
+            <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800' }}>{n.n} · {D.ago(n.ts)}</Text>
             <Txt>{n.t}</Txt>
           </View>
-          {(n.u === me.id || isParent) && <Pressable hitSlop={8} onPress={() => del(n.ts)}><Text style={{ color: C.muted }}>✕</Text></Pressable>}
+          {(n.u === me.id || n.u === currentUid() || isParent) && <Pressable hitSlop={8} onPress={() => act(D.OPS.delNote(k, n.ts))}><Text style={{ color: C.muted }}>✕</Text></Pressable>}
         </View>
       ))}
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 4 }}>
         <Input style={{ flex: 1 }} value={text} onChangeText={setText} placeholder="Écrire une note…" multiline onSubmitEditing={send} />
         <Btn small label="Envoyer" onPress={send} disabled={busy || !text.trim()} />
       </View>
+      {isParent && <Btn kind="danger" small label="🗑️ Retirer cette tâche" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+        onPress={() => ask('Retirer cette tâche ?', `${t.e} ${t.n} (${owner.name})`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => { setModal(null); if (await act(D.OPS.remove(found.uid, k))) toast('Tâche retirée'); } }])} />}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 14 }} onPress={() => setModal(null)} />
     </View>
+  );
+}
+
+/* ---------- Annonce « réunion d'urgence » ---------- */
+function Announce() {
+  const { fam, isParent } = useCtx();
+  const [hidden, setHidden] = useState(null);
+  const a = fam && fam.announce;
+  React.useEffect(() => { AsyncStorage.getItem('corveo_ann_seen').then((v) => setHidden(v ? Number(v) : 0)).catch(() => setHidden(0)); }, []);
+  if (!a || !a.ts || hidden === null || hidden >= a.ts) return null;
+  return (
+    <View style={{ backgroundColor: '#450A0A', borderRadius: 18, padding: 14, marginBottom: 12, borderWidth: 3, borderColor: C.red }}>
+      <Text style={{ color: '#FCA5A5', fontWeight: '900', letterSpacing: 1, fontSize: 13 }}>📢 RÉUNION D'URGENCE</Text>
+      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 17, marginTop: 6 }}>{a.t}</Text>
+      <Text style={{ color: '#FCA5A5', fontSize: 12, marginTop: 6 }}>{a.a || '👑'} {a.by} · {D.ago(a.ts)}</Text>
+      <Row style={{ marginTop: 10 }}>
+        <Btn small kind="sec" label="👍 Vu !" onPress={() => { setHidden(a.ts); AsyncStorage.setItem('corveo_ann_seen', String(a.ts)).catch(() => {}); }} />
+        {isParent && <Text style={{ color: '#FCA5A5', fontSize: 12 }}>Modifiable dans l'onglet Famille</Text>}
+      </Row>
+    </View>
+  );
+}
+function AnnounceForm() {
+  const { fam, me, setModal, refresh } = useCtx();
+  const [t, setT] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!t.trim()) return;
+    setBusy(true);
+    try { await D.setAnnounce(fam.id, { t: t.trim(), by: me.name, a: me.avatar || '', ts: Date.now() }); await refresh(); setModal(null); toast('📢 Annonce envoyée à toute la famille'); }
+    catch (e) { toast(e.message, 'bad'); setBusy(false); }
+  };
+  return (
+    <View>
+      <H2>📢 Réunion d'urgence</H2>
+      <Txt muted>Un message en rouge, en haut de l'appli de tout le monde.</Txt>
+      <Input style={{ marginTop: 12, minHeight: 80 }} value={t} onChangeText={setT} placeholder="ex. Tout le monde range sa chambre avant 18h !" multiline autoFocus />
+      <Row style={{ marginTop: 12 }}>
+        <Btn label="Envoyer" onPress={send} disabled={busy || !t.trim()} />
+        {!!(fam.announce && fam.announce.ts) && <Btn kind="sec" label="Effacer l'annonce" onPress={async () => { try { await D.setAnnounce(fam.id, null); await refresh(); setModal(null); } catch (e) { toast(e.message, 'bad'); } }} />}
+        <Btn kind="ghost" label="Annuler" onPress={() => setModal(null)} />
+      </Row>
+    </View>
+  );
+}
+
+/* ---------- Confettis ---------- */
+const BITS = ['🎉', '✨', '🟩', '⭐', '🎊', '💚', '🟢', '🏆'];
+function Confetti({ trigger }) {
+  const [run, setRun] = useState(0);
+  const first = React.useRef(true);
+  React.useEffect(() => { if (first.current) { first.current = false; return; } setRun((r) => r + 1); }, [trigger]);
+  if (!run) return null;
+  return <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: -40, height: 700 }}>{Array.from({ length: 18 }).map((_, i) => <Bit key={run + '_' + i} i={i} />)}</View>;
+}
+function Bit({ i }) {
+  const v = React.useRef(new Animated.Value(0)).current;
+  const x = React.useRef(Math.random() * 100).current;
+  const dur = React.useRef(1400 + Math.random() * 1000).current;
+  React.useEffect(() => { Animated.timing(v, { toValue: 1, duration: dur, delay: Math.random() * 300, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(); }, []);
+  return (
+    <Animated.Text style={{ position: 'absolute', left: `${x}%`, top: 0, fontSize: 22, opacity: v.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
+      transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, 650] }) }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${(i % 2 ? 1 : -1) * 360}deg`] }) }] }}>
+      {BITS[i % BITS.length]}
+    </Animated.Text>
   );
 }
 
@@ -383,15 +472,18 @@ export function TaskSheet({ uid, i }) {
    ========================================================= */
 export function FamilyScreen() {
   const { fam, members, week, isParent, setModal, refresh } = useCtx();
+  const [open, setOpen] = useState(null);
   const share = async () => {
-    const msg = `Rejoins notre famille sur Corvéo 🧹\nCode : ${fam.code}`;
-    try { if (isWeb && navigator.clipboard) { await navigator.clipboard.writeText(fam.code); toast('Code copié 📋'); } else await Share.share({ message: msg }); } catch (e) { /* annulé */ }
+    const msg = `Rejoins notre famille sur Corvéo 🧹\nCode : ${fam.code}\nhttps://oranginours.github.io/revisio/corveo/`;
+    try { if (isWeb && navigator.clipboard) { await navigator.clipboard.writeText(msg); toast('Code copié 📋'); } else await Share.share({ message: msg }); } catch (e) { /* annulé */ }
   };
-  const ranking = members.filter((m) => week && week.assign && week.assign[m.id])
+  const ranking = members.filter((m) => week && D.itemsOf(week, m.id).length)
     .map((m) => ({ m, s: D.stats(week, m.id) }))
-    .sort((a, b) => (b.s.total ? b.s.done / b.s.total : 0) - (a.s.total ? a.s.done / a.s.total : 0));
+    .sort((a, b) => (b.s.total ? b.s.done / b.s.total : 0) - (a.s.total ? a.s.done / a.s.total : 0) || b.s.done - a.s.done);
+  const feed = D.activity(week, members, 15);
   return (
     <View>
+      <Announce />
       <Card>
         <Txt muted bold style={{ fontSize: 12 }}>FAMILLE</Txt>
         <H1 style={{ fontSize: 24 }}>{fam.name}</H1>
@@ -402,121 +494,190 @@ export function FamilyScreen() {
           </View>
           <Btn small kind="sec" label={isWeb ? '📋 Copier' : '📤 Envoyer'} onPress={share} />
         </View>
-        {isParent && <Btn small kind="ghost" label="🔄 Changer le code" style={{ alignSelf: 'flex-start', marginTop: 6 }}
-          onPress={() => ask('Changer le code ?', "L'ancien code ne marchera plus.", [{ text: 'Annuler', style: 'cancel' }, { text: 'Changer', onPress: async () => { try { await D.newCode(fam); await refresh(true); toast('Nouveau code créé'); } catch (e) { toast(e.message, 'bad'); } } }])} />}
+        {isParent && (
+          <Row style={{ marginTop: 10 }}>
+            <Btn small label="📢 Réunion d'urgence" onPress={() => setModal(<AnnounceForm />)} />
+            <Btn small kind="ghost" label="🔄 Changer le code"
+              onPress={() => ask('Changer le code ?', "L'ancien code ne marchera plus.", [{ text: 'Annuler', style: 'cancel' }, { text: 'Changer', onPress: async () => { try { await D.newCode(fam); await refresh(); toast('Nouveau code créé'); } catch (e) { toast(e.message, 'bad'); } } }])} />
+          </Row>
+        )}
       </Card>
 
       {ranking.length > 0 && (
         <Card>
           <H2>🏅 Cette semaine</H2>
           {ranking.map(({ m, s }, k) => (
-            <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: k ? 12 : 0 }}>
-              <Text style={{ color: C.muted, fontWeight: '900', width: 18 }}>{k + 1}</Text>
-              <Avatar m={m} size={36} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: C.ink, fontWeight: '800', marginBottom: 3 }}>{m.name}{week.extra && week.extra[m.id] ? `  ·  +${week.extra[m.id]} en plus` : ''}</Text>
-                <TaskBar small done={s.done} total={s.total} />
-              </View>
+            <View key={m.id} style={{ marginTop: k ? 12 : 0 }}>
+              <Pressable onPress={() => setOpen(open === m.id ? null : m.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: k === 0 && s.done ? C.yellow : C.muted, fontWeight: '900', width: 22 }}>{k === 0 && s.done ? '👑' : k + 1}</Text>
+                <Avatar m={m} size={36} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: C.ink, fontWeight: '800', marginBottom: 3 }}>{m.name}{D.itemsOf(week, m.id).some((x) => x.x) ? `  ·  +${D.itemsOf(week, m.id).filter((x) => x.x).length} en plus` : ''}</Text>
+                  <TaskBar small done={s.done} total={s.total} />
+                </View>
+                <Text style={{ color: C.muted }}>{open === m.id ? '▾' : '▸'}</Text>
+              </Pressable>
+              {open === m.id && <View style={{ marginTop: 8 }}><PersonTasks m={m} week={week} compact /></View>}
+            </View>
+          ))}
+          <Txt muted style={{ fontSize: 12, marginTop: 10 }}>Touche quelqu'un pour voir ses tâches{isParent ? ' et les cocher' : ''}.</Txt>
+        </Card>
+      )}
+
+      {feed.length > 0 && (
+        <Card>
+          <H2>📰 Ce qui s'est passé</H2>
+          {feed.map((e, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: i ? 10 : 0 }}>
+              <Avatar m={e.m} size={30} />
+              <Text style={{ color: C.ink, flex: 1 }}><Text style={{ fontWeight: '800' }}>{e.m.name}</Text> {e.txt}</Text>
+              <Text style={{ color: C.muted, fontSize: 11 }}>{D.ago(e.ts)}</Text>
             </View>
           ))}
         </Card>
       )}
 
+      <History />
+
       <H2>Membres</H2>
       {members.map((m) => (
-        <Pressable key={m.id} onPress={() => (isParent ? setModal(<MemberSheet m={m} />) : null)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 18, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: C.line }}>
+        <Pressable key={m.id} onPress={() => setModal(<MemberSheet m={m} />)}
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 18, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
           <Avatar m={m} />
           <View style={{ flex: 1 }}>
             <Text style={{ color: C.ink, fontWeight: '800', fontSize: 16 }}>{m.name}{m.id === currentUid() ? ' (toi)' : ''}</Text>
             <Txt muted style={{ fontSize: 13 }}>{m.managed ? '📵 sans téléphone' : '@' + m.username}{m.active === false ? ' · ne participe pas' : ''}</Txt>
           </View>
           <Chip color={m.role === 'parent' ? '#1E3A5F' : C.card2} ink={m.role === 'parent' ? C.blue : C.ink}>{m.role === 'parent' ? '👑 Parent' : 'Enfant'}</Chip>
-          {isParent && <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>}
+          <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>
         </Pressable>
       ))}
       {isParent && <Btn kind="sec" label="📵 Ajouter un enfant sans téléphone" style={{ marginTop: 6 }} onPress={() => setModal(<ManagedForm />)} />}
-      {isParent && <Txt muted style={{ fontSize: 12, marginTop: 8 }}>Touche un membre pour le passer parent, valider ses tâches ou lui en donner une en plus. Les profils sans téléphone s'utilisent depuis ton appli : touche ton avatar en haut pour changer de profil.</Txt>}
     </View>
   );
 }
 
-function MemberSheet({ m }) {
-  const { fam, week, setWeek, tasks, setModal, refresh, actAs, actor } = useCtx();
-  const [busy, setBusy] = useState(false);
-  const run = async (fn, msg) => { setBusy(true); try { await fn(); await refresh(true); if (msg) toast(msg); setModal(null); } catch (e) { toast(e.message, 'bad'); } setBusy(false); };
-  const list = (week && week.assign && week.assign[m.id]) || [];
-  const [, setT] = useState(0);
-  const [give, setGive] = useState(false);
-  const self = m.id === currentUid();
+// 📈 Les 6 dernières semaines : pourcentage par personne et séries de semaines parfaites
+function History() {
+  const { fam, members } = useCtx();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  React.useEffect(() => { if (open && !data) D.history(fam.id, 6).then(setData).catch(() => setData([])); }, [open]);
+  const people = members.filter((m) => m.active !== false);
   return (
-    <View>
-      <Row style={{ marginBottom: 12 }}>
-        <Avatar m={m} size={52} />
-        <View style={{ flex: 1 }}><H2 style={{ marginBottom: 0 }}>{m.name}</H2><Txt muted>@{m.username}</Txt></View>
-      </Row>
-      {list.length > 0 && (
-        <View>
-          <Label>Ses tâches (tu peux les valider)</Label>
-          {list.map((t, i) => {
-            const k = D.doneKey(m.id, i);
-            const done = !!(week.done && week.done[k]);
+    <Card>
+      <Pressable onPress={() => setOpen(!open)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <H2 style={{ flex: 1, marginBottom: 0 }}>📈 Historique</H2>
+        <Text style={{ color: C.muted }}>{open ? '▾' : '▸'}</Text>
+      </Pressable>
+      {open && !data && <ActivityIndicator color={C.green} style={{ marginTop: 10 }} />}
+      {open && data && (
+        <View style={{ marginTop: 10 }}>
+          <View style={{ flexDirection: 'row', marginLeft: 110, marginBottom: 4 }}>
+            {data.map((d) => <Text key={d.o} style={{ flex: 1, color: C.muted, fontSize: 10, textAlign: 'center' }}>{d.o === 0 ? 'cette' : D.shortWeek(d.o)}</Text>)}
+          </View>
+          {people.map((m) => {
+            let streak = 0;
+            for (let i = data.length - 2; i >= 0; i--) { const w = data[i].w; const s = w ? D.stats(w, m.id) : null; if (s && s.total && s.done === s.total) streak++; else break; }
             return (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{ flex: 1 }}>
-                  <TaskRow t={t} status={D.statusOf(week, k)} notes={((week.notes || {})[k] || []).length}
-                    onPress={() => setModal(<TaskSheet uid={m.id} i={i} />)}
-                    onCheck={async () => {
-                      week.done = { ...(week.done || {}), [k]: done ? undefined : Date.now() }; setT((x) => x + 1);
-                      try { await D.setDone(fam.id, m.id, i, !done); refresh(); } catch (e) { toast(e.message, 'bad'); }
-                    }} />
+              <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ width: 110, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Avatar m={m} size={24} />
+                  <Text numberOfLines={1} style={{ color: C.ink, fontWeight: '700', flex: 1, fontSize: 13 }}>{m.name}{streak >= 2 ? ` 🔥${streak}` : ''}</Text>
                 </View>
-                <Pressable hitSlop={8} style={{ marginBottom: 8, padding: 6 }} onPress={() => ask('Retirer cette tâche ?', `${t.e} ${t.n} (${m.name})`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => {
-                  try { setWeek(await D.removeTaskAt(fam.id, D.weekId(), week, m.id, i)); toast('Tâche retirée'); } catch (e) { toast(e.message, 'bad'); }
-                } }])}><Text style={{ color: C.muted, fontSize: 18 }}>✕</Text></Pressable>
+                {data.map((d) => {
+                  const s = d.w ? D.stats(d.w, m.id) : null;
+                  const p = s && s.total ? s.done / s.total : null;
+                  return (
+                    <View key={d.o} style={{ flex: 1, alignItems: 'center' }}>
+                      <View style={{ width: 18, height: 34, borderRadius: 4, backgroundColor: '#3A3F4B', borderWidth: 1.5, borderColor: '#000', justifyContent: 'flex-end', overflow: 'hidden' }}>
+                        {p !== null && <View style={{ height: `${Math.round(p * 100)}%`, backgroundColor: p === 1 ? C.green : p >= 0.5 ? C.yellow : C.red }} />}
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             );
           })}
+          <Txt muted style={{ fontSize: 11 }}>Vert = tout fait · 🔥 = semaines parfaites d'affilée</Txt>
         </View>
       )}
-      {week && (
+    </Card>
+  );
+}
+
+function MemberSheet({ m }) {
+  const { fam, week, tasks, setModal, refresh, actAs, actor, isParent, act } = useCtx();
+  const [busy, setBusy] = useState(false);
+  const [give, setGive] = useState(false);
+  const run = async (fn, msg, close) => { setBusy(true); try { await fn(); await refresh(); if (msg) toast(msg); if (close) setModal(null); } catch (e) { toast(e.message, 'bad'); } setBusy(false); };
+  const self = m.id === currentUid();
+  const list = week ? D.itemsOf(week, m.id) : [];
+  const s = week ? D.stats(week, m.id) : { done: 0, total: 0 };
+  return (
+    <View>
+      <Row style={{ marginBottom: 12, flexWrap: 'nowrap' }}>
+        <Avatar m={m} size={52} />
+        <View style={{ flex: 1 }}><H2 style={{ marginBottom: 0 }}>{m.name}</H2><Txt muted>{m.managed ? '📵 sans téléphone' : '@' + m.username} · {m.role === 'parent' ? '👑 Parent' : 'Enfant'}</Txt></View>
+      </Row>
+      {week && list.length > 0 && <TaskBar small label="" done={s.done} total={s.total} />}
+      {week && list.length > 0 && (
+        <View style={{ marginTop: 10 }}>
+          <Label>{isParent ? 'Ses tâches (touche pour cocher)' : 'Ses tâches'}</Label>
+          {isParent && (
+            <Row style={{ marginBottom: 8 }}>
+              <Btn small kind="sec" label="✅ Tout cocher" onPress={async () => { for (const it of list) if (D.statusOf(week, it.k) !== 'done') await act(D.OPS.done(it.k, true)); }} />
+              <Btn small kind="ghost" label="Tout décocher" onPress={async () => { for (const it of list) if (D.statusOf(week, it.k) === 'done') await act(D.OPS.done(it.k, false)); }} />
+            </Row>
+          )}
+          <PersonTasks m={m} week={week} compact />
+        </View>
+      )}
+      {isParent && week && (
         give ? (
           <View>
-            <Label>Quelle tâche en plus ?</Label>
-            {tasks.map((t) => (
-              <Pressable key={t.id} onPress={() => run(() => D.giveTask(fam.id, week, m.id, t), `Tâche donnée à ${m.name}`)} style={{ flexDirection: 'row', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderColor: C.line }}>
-                <Text style={{ fontSize: 20 }}>{t.emoji}</Text><Txt>{t.title}</Txt>
-              </Pressable>
-            ))}
-            <NewTaskQuick busy={busy} onAdd={(t, keep) => run(async () => {
+            <Label>Quelle tâche lui donner ?</Label>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {tasks.map((t) => (
+                <Pressable key={t.id} onPress={async () => { setGive(false); if (await act(D.OPS.give(m.id, t))) toast(`${t.emoji} donnée à ${m.name}`); }} style={({ pressed }) => ({ backgroundColor: C.card2, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+                  <Text style={{ color: C.ink, fontSize: 13 }}>{t.emoji} {t.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <NewTaskQuick busy={busy} onAdd={async (t, keep) => {
               let task = { id: 'x' + Date.now().toString(36), title: t.title.trim(), emoji: t.emoji };
-              if (keep) { const d = await D.addTask(fam.id, t); task = { id: d.id, title: d.title, emoji: d.emoji }; }
-              await D.giveTask(fam.id, week, m.id, task);
-            }, `Tâche donnée à ${m.name}`)} />
+              if (keep) { try { const d = await D.addTask(fam.id, t); task = { id: d.id, title: d.title, emoji: d.emoji }; } catch (e) { return toast(e.message, 'bad'); } }
+              setGive(false);
+              if (await act(D.OPS.give(m.id, task))) toast(`${task.emoji} donnée à ${m.name}`);
+            }} />
           </View>
-        ) : <Btn kind="sec" small label="➕ Lui donner une tâche en plus" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => setGive(true)} />
+        ) : <Btn kind="sec" small label="➕ Lui donner une tâche" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => setGive(true)} />
       )}
-      {m.managed && (
+      {isParent && m.managed && (
         <View>
           <Btn label={`📵 Utiliser le profil de ${m.name}`} style={{ marginTop: 12 }} onPress={() => { actAs(m.id); setModal(null); }} />
           <Btn kind="sec" small label="✏️ Modifier le nom et l'avatar" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => setModal(<ManagedForm m={m} />)} />
         </View>
       )}
-      {!m.managed && <Label>Rôle</Label>}
-      {!m.managed && <Row>
-        {['parent', 'enfant'].map((r) => (
-          <Btn key={r} small kind={m.role === r ? 'pri' : 'sec'} label={r === 'parent' ? '👑 Parent' : '🧒 Enfant'} disabled={busy || (self && r === 'enfant')}
-            onPress={() => m.role !== r && run(() => D.setMember(m.id, { role: r }), `${m.name} est maintenant ${r}`)} />
-        ))}
-      </Row>}
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 14 }}>
-        <Txt style={{ flex: 1 }}>Participe aux tâches</Txt>
-        <Switch value={m.active !== false} onValueChange={(v) => run(() => D.setMember(m.id, { active: v }), v ? 'Participe à partir de la prochaine répartition' : 'Ne recevra plus de tâches')} trackColor={{ true: C.green }} />
-      </Row>
-      {m.managed && <Btn kind="danger" small label="🗑️ Supprimer ce profil" style={{ marginTop: 16, alignSelf: 'flex-start' }}
-        onPress={() => ask('Supprimer ce profil ?', `Le profil de ${m.name} sera effacé.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => run(async () => { await D.deleteManaged(m.id); if (actor.id === m.id) actAs(null); }, 'Profil supprimé') }])} />}
-      {!self && !m.managed && m.id !== fam.owner && <Btn kind="danger" small label="Retirer de la famille" style={{ marginTop: 16, alignSelf: 'flex-start' }}
-        onPress={() => ask('Retirer ?', `${m.name} ne fera plus partie de la famille.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => run(() => D.setMember(m.id, { familyId: '', role: '' }), 'Membre retiré') }])} />}
+      {isParent && !m.managed && <Label>Rôle</Label>}
+      {isParent && !m.managed && (
+        <Row>
+          {['parent', 'enfant'].map((r) => (
+            <Btn key={r} small kind={m.role === r ? 'pri' : 'sec'} label={r === 'parent' ? '👑 Parent' : '🧒 Enfant'} disabled={busy || (self && r === 'enfant')}
+              onPress={() => m.role !== r && run(() => D.setMember(m.id, { role: r }), `${m.name} est maintenant ${r}`)} />
+          ))}
+        </Row>
+      )}
+      {isParent && (
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 14 }}>
+          <Txt style={{ flex: 1 }}>Participe aux tâches</Txt>
+          <Switch value={m.active !== false} onValueChange={(v) => run(() => D.setMember(m.id, { active: v }), v ? 'Participe à partir de la prochaine répartition' : 'Ne recevra plus de tâches')} trackColor={{ true: C.green }} />
+        </Row>
+      )}
+      {isParent && m.managed && <Btn kind="danger" small label="🗑️ Supprimer ce profil" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+        onPress={() => ask('Supprimer ce profil ?', `Le profil de ${m.name} sera effacé.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: () => run(async () => { await D.deleteManaged(m.id); if (actor.id === m.id) actAs(null); }, 'Profil supprimé', true) }])} />}
+      {isParent && !self && !m.managed && m.id !== fam.owner && <Btn kind="danger" small label="Retirer de la famille" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+        onPress={() => ask('Retirer ?', `${m.name} ne fera plus partie de la famille.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => run(() => D.setMember(m.id, { familyId: '', role: '' }), 'Membre retiré', true) }])} />}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 14 }} onPress={() => setModal(null)} />
     </View>
   );
@@ -531,10 +692,10 @@ export function TasksScreen() {
   const people = members.filter((m) => m.active !== false).length || 1;
   const auto = Math.max(1, Math.floor(pool / people));
   const per = fam.perPerson || 0;
-  const setF = async (patch) => { try { await D.updateFamily(fam.id, patch); await refresh(true); } catch (e) { toast(e.message, 'bad'); } };
+  const setF = async (patch) => { try { await D.updateFamily(fam.id, patch); await refresh(); } catch (e) { toast(e.message, 'bad'); } };
   const redo = () => ask('Refaire la répartition ?', 'Les tâches de cette semaine seront redistribuées et les cases cochées remises à zéro.', [
     { text: 'Annuler', style: 'cancel' },
-    { text: 'Répartir', onPress: async () => { try { await D.buildWeek(fam, members, tasks, false); await refresh(true); toast('🔀 Nouvelle répartition faite'); } catch (e) { toast(e.message, 'bad'); } } },
+    { text: 'Répartir', onPress: async () => { try { await D.buildWeek(fam, members, tasks, false); await refresh(); toast('🔀 Nouvelle répartition faite'); } catch (e) { toast(e.message, 'bad'); } } },
   ]);
   return (
     <View>
@@ -558,7 +719,7 @@ export function TasksScreen() {
         {isParent && <Btn small label="＋ Ajouter" onPress={() => setModal(<TaskForm />)} />}
       </Row>
       <Row style={{ marginBottom: 10 }}>
-        {isParent && <Btn small kind="sec" label="📋 Remplacer toute la liste" onPress={() => setModal(<ReplaceTasks fam={fam} members={members} onDone={async () => { setModal(null); await refresh(true); }} onCancel={() => setModal(null)} />)} />}
+        {isParent && <Btn small kind="sec" label="📋 Remplacer toute la liste" onPress={() => setModal(<ReplaceTasks fam={fam} members={members} onDone={async () => { setModal(null); await refresh(); }} onCancel={() => setModal(null)} />)} />}
       </Row>
       {tasks.map((t) => (
         <Pressable key={t.id} onPress={() => (isParent ? setModal(<TaskForm t={t} />) : null)}
@@ -568,11 +729,11 @@ export function TasksScreen() {
             <Text style={{ color: C.ink, fontWeight: '800', fontSize: 15 }}>{t.title}</Text>
             {!!t.info && <Text style={{ color: C.muted, fontSize: 12 }} numberOfLines={2}>📌 {t.info}</Text>}
           </View>
-          <Chip>{t.times > 1 ? `${t.times}× / sem.` : '1× / sem.'}</Chip>
+          <Chip>{(t.times > 1 ? `${t.times}× / sem.` : '1× / sem.') + (t.day ? ` · ${D.DAY_NAMES[t.day].slice(0, 3)}` : '')}</Chip>
         </Pressable>
       ))}
       {!tasks.length && <Txt muted>Aucune tâche pour l'instant.</Txt>}
-      {isParent && tasks.length > 0 && !week && <Btn label="▶️ Lancer la semaine" style={{ marginTop: 10 }} onPress={async () => { try { await D.ensureWeek(fam, members, tasks); await refresh(true); } catch (e) { toast(e.message, 'bad'); } }} />}
+      {isParent && tasks.length > 0 && !week && <Btn label="▶️ Lancer la semaine" style={{ marginTop: 10 }} onPress={async () => { try { await D.ensureWeek(fam, members, tasks); await refresh(); } catch (e) { toast(e.message, 'bad'); } }} />}
     </View>
   );
 }
@@ -605,12 +766,13 @@ function TaskForm({ t }) {
   const [title, setTitle] = useState(t ? t.title : '');
   const [times, setTimes] = useState(t ? t.times || 1 : 1);
   const [info, setInfo] = useState(t ? t.info || '' : '');
+  const [day, setDay] = useState(t ? t.day || 0 : 0);
   const [err, setErr] = useState('');
   const save = async () => {
     if (!title.trim()) return setErr('Écris le nom de la tâche.');
     try {
-      if (t) await D.editTask(fam.id, t.id, { emoji, title, times, info }); else await D.addTask(fam.id, { emoji, title, times, info });
-      await refresh(true); setModal(null); toast(t ? 'Tâche modifiée' : 'Tâche ajoutée ✅');
+      if (t) await D.editTask(fam.id, t.id, { emoji, title, times, info, day }); else await D.addTask(fam.id, { emoji, title, times, info, day });
+      await refresh(); setModal(null); toast(t ? 'Tâche modifiée' : 'Tâche ajoutée ✅');
     } catch (e) { setErr(e.message); }
   };
   return (
@@ -639,13 +801,22 @@ function TaskForm({ t }) {
       <Label>Combien de fois par semaine ?</Label>
       <Stepper value={times} onChange={setTimes} min={1} max={14} fmt={(v) => `${v}×`} />
       <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Ex. « Vider le lave-vaisselle » 7× : elle sera partagée entre plusieurs personnes.</Txt>
+      <Label>Un jour précis ? (facultatif)</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {['N\'importe', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((l, d) => (
+          <Pressable key={d} onPress={() => setDay(d)} style={{ paddingVertical: 8, paddingHorizontal: 11, borderRadius: 10, backgroundColor: day === d ? C.green : C.bg, borderWidth: 1, borderColor: day === d ? C.green : C.line }}>
+            <Text style={{ color: day === d ? '#0B1A06' : C.ink, fontWeight: '800', fontSize: 13 }}>{l}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Ex. « Sortir les poubelles » le mardi : elle passe en tête de liste ce jour-là.</Txt>
       <Err>{err}</Err>
       <Row style={{ marginTop: 16 }}>
         <Btn label="Enregistrer" onPress={save} />
         <Btn kind="ghost" label="Annuler" onPress={() => setModal(null)} />
       </Row>
       {t && <Btn kind="danger" small label="🗑️ Supprimer" style={{ marginTop: 14, alignSelf: 'flex-start' }}
-        onPress={() => ask('Supprimer ?', `« ${t.title} » ne sera plus distribuée.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: async () => { try { await D.removeTask(fam.id, t.id); await refresh(true); setModal(null); } catch (e) { toast(e.message, 'bad'); } } }])} />}
+        onPress={() => ask('Supprimer ?', `« ${t.title} » ne sera plus distribuée.`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Supprimer', style: 'destructive', onPress: async () => { try { await D.removeTask(fam.id, t.id); await refresh(); setModal(null); } catch (e) { toast(e.message, 'bad'); } } }])} />}
       <Txt muted style={{ fontSize: 12, marginTop: 10 }}>Les changements comptent à partir de la prochaine répartition.</Txt>
     </View>
   );
@@ -659,7 +830,7 @@ export function ProfileScreen() {
   const [name, setName] = useState(me.name);
   const [avatar, setAvatar] = useState(me.avatar);
   const [color, setColor] = useState(me.color);
-  const save = async () => { try { await D.updateMe({ name: name.trim() || me.username, avatar, color }); await refresh(true); toast('Profil enregistré'); } catch (e) { toast(e.message, 'bad'); } };
+  const save = async () => { try { await D.updateMe({ name: name.trim() || me.username, avatar, color }); await refresh(); toast('Profil enregistré'); } catch (e) { toast(e.message, 'bad'); } };
   return (
     <View>
       <Card>
@@ -674,7 +845,7 @@ export function ProfileScreen() {
       <Btn kind="sec" label="Se déconnecter" onPress={logout} />
       <DeleteAccount me={me} after={logout} />
       {fam.owner !== me.id && <Btn kind="danger" label="Quitter la famille" style={{ marginTop: 10 }}
-        onPress={() => ask('Quitter la famille ?', 'Tu pourras la rejoindre à nouveau avec le code.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Quitter', style: 'destructive', onPress: async () => { await D.leaveFamily(); await refresh(true); } }])} />}
+        onPress={() => ask('Quitter la famille ?', 'Tu pourras la rejoindre à nouveau avec le code.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Quitter', style: 'destructive', onPress: async () => { await D.leaveFamily(); await refresh(); } }])} />}
     </View>
   );
 }
@@ -720,7 +891,7 @@ function ManagedForm({ m }) {
     try {
       if (m) await D.updateManaged(m.id, { name: name.trim(), avatar, color });
       else await D.createManaged(fam.id, { name, avatar, color });
-      await refresh(true); setModal(null);
+      await refresh(); setModal(null);
       toast(m ? 'Profil modifié' : `📵 Profil de ${name.trim()} créé : il aura ses tâches à la prochaine répartition`);
     } catch (e) { setErr(e.message); setBusy(false); }
   };

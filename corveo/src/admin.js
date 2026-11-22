@@ -154,7 +154,7 @@ function FamEdit({ f, members, done, reload }) {
   );
 }
 
-// Cocher / décocher les tâches d'une semaine (même passée)
+// Cocher / décocher / ajouter / retirer les tâches d'une semaine (même passée)
 function WeekEditor({ f, members }) {
   const [n, setN] = useState(0);
   const [week, setWeek] = useState(undefined);
@@ -164,43 +164,25 @@ function WeekEditor({ f, members }) {
   const [giving, setGiving] = useState(null);
   useEffect(() => { D.getTasks(f.id).then(setTasks).catch(() => {}); }, [f.id]);
   const wk = D.weekIdOffset(n);
-  const give = async (uid, t) => {
-    setBusy(true);
-    try { const list = await D.giveTaskIn(f.id, wk, week, uid, t); setWeek({ ...week, assign: { ...week.assign, [uid]: list } }); toast(`${t.emoji} ajoutée`); }
-    catch (e) { toast(e.message, 'bad'); }
-    setBusy(false); setGiving(null);
-  };
-  const removeAt = (uid, i, t) => ask('Retirer cette tâche ?', `${t.e} ${t.n}`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => {
-    setBusy(true);
-    try { setWeek(await D.removeTaskAt(f.id, wk, week, uid, i)); toast('Tâche retirée'); }
-    catch (e) { toast(e.message, 'bad'); }
-    setBusy(false);
-  } }]);
   useEffect(() => { let ok = true; setWeek(undefined); D.getWeek(f.id, wk).then((w) => ok && setWeek(w || null)).catch(() => ok && setWeek(null)); return () => { ok = false; }; }, [wk]);
-  const toggle = async (uid, i) => {
-    const k = D.doneKey(uid, i);
-    const on = !(week.done && week.done[k]);
-    setWeek({ ...week, done: { ...(week.done || {}), [k]: on ? Date.now() : undefined } });
-    try { await D.setDoneIn(f.id, wk, uid, i, on); if (n < 0) setTouchedPast(true); }
-    catch (e) { toast(e.message, 'bad'); }
+  // l'écran change tout de suite, puis on enregistre
+  const run = async (op, msg) => {
+    setWeek((w) => (w ? op.run(w).next : w));
+    try { await D.applyOp(f.id, wk, op, week); if (n < 0) setTouchedPast(true); if (msg) toast(msg); }
+    catch (e) { toast(e.message, 'bad'); D.getWeek(f.id, wk).then((w) => setWeek(w || null)).catch(() => {}); }
   };
   const all = async (uid, on) => {
-    const list = (week.assign || {})[uid] || [];
     setBusy(true);
-    const done = { ...(week.done || {}) };
-    try {
-      for (let i = 0; i < list.length; i++) { const k = D.doneKey(uid, i); if (!!done[k] !== on) { await D.setDoneIn(f.id, wk, uid, i, on); done[k] = on ? Date.now() : undefined; } }
-      setWeek({ ...week, done }); if (n < 0) setTouchedPast(true);
-    } catch (e) { toast(e.message, 'bad'); }
+    for (const it of D.itemsOf(week, uid)) if ((D.statusOf(week, it.k) === 'done') !== on) await run(D.OPS.done(it.k, on));
     setBusy(false);
   };
   const recompute = async () => {
     setBusy(true);
-    try { const tasks = await D.getTasks(f.id); const c = await D.recomputeExtras(f, tasks); toast(c ? `♻️ Tâches en plus recalculées (${c} personne${c > 1 ? 's' : ''})` : 'Rien à changer'); setTouchedPast(false); }
+    try { const c = await D.recomputeExtras(f, tasks); toast(c ? `♻️ Tâches en plus recalculées (${c} personne${c > 1 ? 's' : ''})` : 'Rien à changer'); setTouchedPast(false); }
     catch (e) { toast(e.message, 'bad'); }
     setBusy(false);
   };
-  const people = members.filter((m) => week && week.assign && (week.assign[m.id] || m.active !== false));
+  const people = members.filter((m) => week && (D.itemsOf(week, m.id).length || m.active !== false));
   return (
     <View style={{ marginTop: 14 }}>
       <Label>Tâches de la semaine</Label>
@@ -211,39 +193,40 @@ function WeekEditor({ f, members }) {
       </View>
       {week === undefined && <ActivityIndicator color={C.green} style={{ marginTop: 10 }} />}
       {week === null && <Txt muted style={{ marginTop: 8 }}>Pas de répartition cette semaine-là.</Txt>}
-      {week && people.length === 0 && <Txt muted style={{ marginTop: 8 }}>Personne n'avait de tâches.</Txt>}
       {week && people.map((m) => {
-        const list = week.assign[m.id] || [];
+        const list = D.itemsOf(week, m.id);
         const st = D.stats(week, m.id);
         return (
           <View key={m.id} style={{ marginTop: 12 }}>
             <Row style={{ flexWrap: 'nowrap' }}>
               <Avatar m={m} size={26} />
               <Text style={{ color: C.ink, fontWeight: '800', flex: 1 }}>{m.name} <Text style={{ color: C.muted }}>{st.done}/{st.total}</Text></Text>
-              <Pressable disabled={busy} onPress={() => all(m.id, st.done < st.total)} hitSlop={6}>
+              {list.length > 0 && <Pressable disabled={busy} onPress={() => all(m.id, st.done < st.total)} hitSlop={6}>
                 <Text style={{ color: C.green, fontWeight: '800', fontSize: 12 }}>{st.done < st.total ? 'Tout cocher' : 'Tout décocher'}</Text>
-              </Pressable>
+              </Pressable>}
             </Row>
-            {list.map((t, i) => {
-              const done = !!(week.done && week.done[D.doneKey(m.id, i)]);
+            {list.map((t) => {
+              const done = D.statusOf(week, t.k) === 'done';
               return (
-                <Pressable key={i} disabled={busy} onPress={() => toggle(m.id, i)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingLeft: 6 }}>
+                <Pressable key={t.k} onPress={() => run(D.OPS.done(t.k, !done))} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingLeft: 6 }}>
                   <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: done ? C.green : '#5B6478', backgroundColor: done ? C.green : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                     {done && <Text style={{ color: '#0B1A06', fontWeight: '900', fontSize: 13 }}>✓</Text>}
                   </View>
                   <Text style={{ fontSize: 16 }}>{t.e}</Text>
-                  <Text style={{ color: done ? C.muted : C.ink, flex: 1, textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}</Text>
-                  <Pressable disabled={busy} hitSlop={10} onPress={() => removeAt(m.id, i, t)}><Text style={{ color: C.muted, fontSize: 16, paddingHorizontal: 6 }}>✕</Text></Pressable>
+                  <Text style={{ color: done ? C.muted : C.ink, flex: 1, textDecorationLine: done ? 'line-through' : 'none' }}>{t.n}{t.x ? ' ·  en plus' : ''}</Text>
+                  <Pressable hitSlop={10} onPress={() => ask('Retirer cette tâche ?', `${t.e} ${t.n}`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => run(D.OPS.remove(m.id, t.k), 'Tâche retirée') }])}>
+                    <Text style={{ color: C.muted, fontSize: 16, paddingHorizontal: 6 }}>✕</Text>
+                  </Pressable>
                 </Pressable>
               );
             })}
-            <Row style={{ marginTop: 4, marginLeft: 6 }}>
-              <Pressable disabled={busy} onPress={() => setGiving(giving === m.id ? null : m.id)} hitSlop={6}><Text style={{ color: C.blue, fontWeight: '800', fontSize: 13 }}>＋ Ajouter une tâche</Text></Pressable>
-            </Row>
+            <Pressable onPress={() => setGiving(giving === m.id ? null : m.id)} hitSlop={6} style={{ marginTop: 4, marginLeft: 6 }}>
+              <Text style={{ color: C.blue, fontWeight: '800', fontSize: 13 }}>＋ Ajouter une tâche</Text>
+            </Pressable>
             {giving === m.id && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 6 }}>
                 {tasks.map((t) => (
-                  <Pressable key={t.id} disabled={busy} onPress={() => give(m.id, t)} style={{ backgroundColor: C.card2, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Pressable key={t.id} onPress={() => { setGiving(null); run(D.OPS.give(m.id, t), `${t.emoji} ajoutée`); }} style={{ backgroundColor: C.card2, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
                     <Text style={{ color: C.ink, fontSize: 13 }}>{t.emoji} {t.title}</Text>
                   </Pressable>
                 ))}
@@ -252,7 +235,8 @@ function WeekEditor({ f, members }) {
             {giving === m.id && <NewTaskQuick busy={busy} onAdd={async (t, keep) => {
               let task = { id: 'x' + Date.now().toString(36), title: t.title.trim(), emoji: t.emoji };
               if (keep) { try { const d = await D.addTask(f.id, t); task = { id: d.id, title: d.title, emoji: d.emoji }; setTasks(await D.getTasks(f.id)); } catch (e) { return toast(e.message, 'bad'); } }
-              await give(m.id, task);
+              setGiving(null);
+              await run(D.OPS.give(m.id, task), `${task.emoji} ajoutée`);
             }} />}
           </View>
         );

@@ -7,6 +7,7 @@ import * as D from './data';
 import { NewTaskQuick } from './admin';
 import { ReplaceTasks } from './replace';
 import { Draggable } from './drag';
+import { notifSupported, notifPrefs, setNotifPrefs, testNotif, resetNotifSig } from './notify';
 import { currentUid, usernameOk, normUser, signOut } from './fb';
 
 export const Ctx = createContext(null);
@@ -842,6 +843,7 @@ export function ProfileScreen() {
         <AvatarPicker avatar={avatar} color={color} setAvatar={setAvatar} setColor={setColor} />
         <Btn label="Enregistrer" style={{ marginTop: 14 }} onPress={save} />
       </Card>
+      <NotifCard />
       <Btn kind="sec" label="Se déconnecter" onPress={logout} />
       <DeleteAccount me={me} after={logout} />
       {fam.owner !== me.id && <Btn kind="danger" label="Quitter la famille" style={{ marginTop: 10 }}
@@ -940,5 +942,35 @@ export function Switcher() {
       {!isParent && <Txt muted style={{ marginTop: 6 }}>Seuls les parents peuvent utiliser les profils sans téléphone.</Txt>}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 10 }} onPress={() => setModal(null)} />
     </View>
+  );
+}
+
+/* ---------- Rappels ---------- */
+function NotifCard() {
+  const { refresh } = useCtx();
+  const [p, setP] = useState(null);
+  React.useEffect(() => { notifPrefs().then(setP); }, []);
+  if (isWeb) return null;
+  if (!notifSupported()) return (
+    <Card><H2>🔔 Rappels</H2><Txt muted>Pour recevoir des rappels (tâches du jour, dernier jour de la semaine…), installe la nouvelle version de l'appli (nouvelle APK).</Txt></Card>
+  );
+  if (!p) return null;
+  const save = async (np) => { setP(np); await setNotifPrefs(np); resetNotifSig(); refresh(); };
+  return (
+    <Card>
+      <H2>🔔 Rappels</H2>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+        <Txt style={{ flex: 1 }}>Me rappeler mes tâches</Txt>
+        <Switch value={p.on} onValueChange={(v) => save({ ...p, on: v })} trackColor={{ true: C.green }} />
+      </Row>
+      {p.on && (
+        <View>
+          <Txt muted style={{ fontSize: 13, marginTop: 6 }}>Le matin pour les tâches du jour, le mercredi et le vendredi soir s'il en reste, et le dimanche (dernier jour).</Txt>
+          <Label>Heure du rappel du soir</Label>
+          <Stepper value={p.hour} onChange={(v) => save({ ...p, hour: v })} min={12} max={22} fmt={(v) => `${v}h00`} />
+          <Btn small kind="ghost" label="Tester une notification" style={{ alignSelf: 'flex-start', marginTop: 10 }} onPress={async () => { if (!(await testNotif())) toast('Autorise les notifications dans les réglages du téléphone', 'bad'); }} />
+        </View>
+      )}
+    </Card>
   );
 }

@@ -15,10 +15,20 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F1420"
-      }
+      },
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notif-icon.png",
+          "color": "#44D62C"
+        }
+      ]
     ],
     "ios": {},
     "web": {

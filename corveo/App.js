@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Avatar } from './src/ui';
 import { Switcher } from './src/screens';
 import { DragProvider } from './src/drag';
+import { scheduleFor } from './src/notify';
 
 const TABS = [['week', '✅', 'Mes tâches'], ['family', '👨‍👩‍👧', 'Famille'], ['tasks', '📋', 'Tâches'], ['me', '🙂', 'Moi']];
 
@@ -94,6 +95,13 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => { loadAll().catch((e) => { toast(e.message, 'bad'); setPhase('offline'); }); }, []);
+  // Rappels sur le téléphone, recalculés quand mes tâches changent
+  useEffect(() => {
+    if (phase !== 'main' || !week || !me) return;
+    const sel = actingId && members.find((m) => m.id === actingId && m.managed);
+    const t = setTimeout(() => scheduleFor(week, sel || me), 1500);
+    return () => clearTimeout(t);
+  }, [week, me, actingId, phase]);
   // Synchro régulière quand l'appli est ouverte
   useEffect(() => {
     if (phase !== 'main') return;

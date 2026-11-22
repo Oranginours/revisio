@@ -167,8 +167,9 @@ export async function ensureWeek(fam, members, tasks) {
   if (!tasks.length) return null;
   return buildWeek(fam, members, tasks, true);
 }
-export async function buildWeek(fam, members, tasks, mustNotExist) {
+export async function buildWeek(fam, members0, tasks, mustNotExist) {
   const wk = weekId();
+  const members = await getMembers(fam.id).catch(() => members0); // liste à jour (quelqu'un vient peut-être de rejoindre)
   const uids = members.filter((m) => m.active !== false).map((m) => m.id);
   const prev = await getWeek(fam.id, prevWeekId()).catch(() => null);
   const prev2 = await getWeek(fam.id, weekIdOffset(-2)).catch(() => null);

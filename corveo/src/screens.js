@@ -1006,6 +1006,9 @@ function PoolCard() {
   if (!pool.length) return null;
   const canTake = mode === 'libre' && left > 0;
   const uids = members.filter((m) => m.active !== false).map((m) => m.id);
+  // les tâches identiques sont regroupées (« ×3 »)
+  const groups = [];
+  pool.forEach((it) => { const g = groups.find((x) => x.it.t === it.t && x.it.n === it.n); if (g) g.n++; else groups.push({ it, n: 1 }); });
   return (
     <Card style={{ borderColor: C.yellow, borderWidth: 2 }}>
       <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
@@ -1017,7 +1020,7 @@ function PoolCard() {
           ? (left > 0 ? `🙋 Choisis encore ${left} tâche${left > 1 ? 's' : ''} : touche celles que tu prends.` : `Tu as tes ${myTarget} tâches. Les autres choisissent les leurs.`)
           : isParent ? 'Touche une tâche pour la donner à quelqu\'un.' : 'Un parent va répartir ces tâches.'}
       </Txt>
-      {pool.map((it) => (
+      {groups.map(({ it, n }) => (
         <Pressable key={it.k} onPress={() => {
             if (isParent) setModal(<TaskSheet uid={D.POOL} k={it.k} />);
             else if (canTake) act(D.OPS.take(actor.id, it.k)).then((ok) => ok && toast(`${it.e} est à toi !`));
@@ -1026,6 +1029,7 @@ function PoolCard() {
           style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 14, marginBottom: 6, backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, transform: [{ scale: pressed ? 0.97 : 1 }], userSelect: 'none' })}>
           <Text style={{ fontSize: 22 }}>{it.e}</Text>
           <Text style={{ color: C.ink, fontWeight: '700', flex: 1 }}>{it.n}{it.d ? `  ·  📅 ${D.DAY_NAMES[it.d]}` : ''}</Text>
+          {n > 1 && <Chip>×{n}</Chip>}
           {(canTake || isParent) && <Text style={{ color: C.green, fontWeight: '900' }}>{isParent && !canTake ? 'Donner ›' : 'Je prends'}</Text>}
         </Pressable>
       ))}

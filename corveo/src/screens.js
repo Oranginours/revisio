@@ -365,7 +365,7 @@ export function TaskSheet({ uid, k }) {
       </View>
       {!canEdit && <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Seul {owner.name} ou un parent peut changer le statut.</Txt>}
 
-      {isParent && (
+      {isParent && others.length > 0 && (
         <View>
           <Label>Donner cette tâche à</Label>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

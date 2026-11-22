@@ -48,7 +48,7 @@ export const Txt = ({ style, muted, bold, center, ...p }) => (
 );
 export const H1 = ({ style, ...p }) => <Text {...p} style={[{ color: C.ink, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 }, style]} />;
 export const H2 = ({ style, ...p }) => <Text {...p} style={[{ color: C.ink, fontSize: 19, fontWeight: '900', marginBottom: 8 }, style]} />;
-export const Label = ({ children }) => <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: 14, marginBottom: 6 }}>{String(children).toUpperCase()}</Text>;
+export const Label = ({ children }) => <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: 14, marginBottom: 6 }}>{(Array.isArray(children) ? children.join('') : String(children)).toUpperCase()}</Text>;
 export const Card = ({ style, ...p }) => <View {...p} style={[{ backgroundColor: C.card, borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.line }, style]} />;
 export const Row = ({ style, ...p }) => <View {...p} style={[{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }, style]} />;
 

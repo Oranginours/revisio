@@ -83,7 +83,7 @@ export default function App() {
     const f = famRef.current;
     if (!f) return false;
     const cur = weekRef.current;
-    if (cur && (!wk || wk === D.weekId())) { const r = op.run(cur); weekRef.current = r.next; setWeek(r.next); }
+    if (cur && (!wk || wk === D.weekId())) { try { const r = op.run(cur); weekRef.current = r.next; setWeek(r.next); } catch (e) { toast(e.message, 'bad'); return false; } }
     pending.current++;
     let ok = true;
     try { await D.applyOp(f.id, wk || D.weekId(), op, cur); } catch (e) { ok = false; toast(e.message, 'bad'); }

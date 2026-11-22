@@ -195,6 +195,8 @@ export function WeekScreen() {
         <Txt muted style={{ fontSize: 13 }}>{famDone ? '🏆 Toute la famille a fini ! Victoire !' : dl === 1 ? '⏰ Dernier jour de la semaine !' : `⏳ Encore ${DAYS[dl]} avant lundi`}</Txt>
       </Card>
 
+      <PoolCard />
+
       {extra > 0 && (
         <View style={{ backgroundColor: '#3B1518', borderRadius: 16, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#7F1D1D' }}>
           <Txt style={{ color: '#FCA5A5' }} bold>⚠️ +{extra} tâche{extra > 1 ? 's' : ''} en plus cette semaine</Txt>
@@ -316,10 +318,10 @@ export function TaskSheet({ uid, k }) {
   const [busy, setBusy] = useState(false);
   const found = week && D.findItem(week, k);
   if (!found) return <View><Txt muted>Cette tâche n'existe plus.</Txt><Btn kind="ghost" label="Fermer" style={{ marginTop: 10 }} onPress={() => setModal(null)} /></View>;
-  const t = found.it, owner = members.find((m) => m.id === found.uid) || { name: '?' };
+  const t = found.it, inPool = found.uid === D.POOL, owner = inPool ? { name: 'personne' } : members.find((m) => m.id === found.uid) || { name: '?' };
   const status = D.statusOf(week, k);
   const mine = found.uid === me.id;
-  const canEdit = mine || isParent;
+  const canEdit = !inPool && (mine || isParent);
   const info = (tasks.find((x) => x.id === t.t) || {}).info;
   const notes = (week.notes || {})[k] || [];
   const doingBy = week.doing && week.doing[k] && week.doing[k].by;
@@ -346,13 +348,14 @@ export function TaskSheet({ uid, k }) {
         <Text style={{ fontSize: 40 }}>{t.e || '✨'}</Text>
         <View style={{ flex: 1 }}>
           <H2 style={{ marginBottom: 0 }}>{t.n}</H2>
-          <Txt muted>{mine ? (me.id === currentUid() ? 'Ta tâche' : `Tâche de ${me.name}`) : `Tâche de ${owner.name}`}{t.d ? ` · 📅 ${D.DAY_NAMES[t.d]}` : ''}{status === 'doing' && doingBy ? ` · lancée par ${doingBy}` : ''}</Txt>
+          <Txt muted>{inPool ? '📦 À répartir' : mine ? (me.id === currentUid() ? 'Ta tâche' : `Tâche de ${me.name}`) : `Tâche de ${owner.name}`}{t.d ? ` · 📅 ${D.DAY_NAMES[t.d]}` : ''}{status === 'doing' && doingBy ? ` · lancée par ${doingBy}` : ''}</Txt>
         </View>
       </Row>
       {!!info && <View style={{ backgroundColor: C.bg, borderRadius: 14, padding: 12, marginTop: 6 }}><Txt muted bold style={{ fontSize: 12 }}>📌 CONSIGNES</Txt><Txt>{info}</Txt></View>}
 
-      <Label>Où ça en est</Label>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
+      {inPool && <PoolTakeButtons it={t} />}
+      {!inPool && <Label>Où ça en est</Label>}
+      {!inPool && <View style={{ flexDirection: 'row', gap: 6 }}>
         {ST.map(([st, l, col]) => {
           const on = status === st;
           return (
@@ -362,10 +365,10 @@ export function TaskSheet({ uid, k }) {
             </Pressable>
           );
         })}
-      </View>
-      {!canEdit && <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Seul {owner.name} ou un parent peut changer le statut.</Txt>}
+      </View>}
+      {!canEdit && !inPool && <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Seul {owner.name} ou un parent peut changer le statut.</Txt>}
 
-      {isParent && others.length > 0 && (
+      {isParent && !inPool && others.length > 0 && (
         <View>
           <Label>Donner cette tâche à</Label>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -396,7 +399,9 @@ export function TaskSheet({ uid, k }) {
         <Input style={{ flex: 1 }} value={text} onChangeText={setText} placeholder="Écrire une note…" multiline onSubmitEditing={send} />
         <Btn small label="Envoyer" onPress={send} disabled={busy || !text.trim()} />
       </View>
-      {isParent && <Btn kind="danger" small label="🗑️ Retirer cette tâche" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+      {isParent && !inPool && <Btn kind="sec" small label="📦 Remettre dans « À répartir »" style={{ marginTop: 16, alignSelf: 'flex-start' }}
+        onPress={async () => { setModal(null); if (await act(D.OPS.release(found.uid, k))) toast('Remise dans « À répartir »'); }} />}
+      {isParent && !inPool && <Btn kind="danger" small label="🗑️ Retirer cette tâche" style={{ marginTop: 16, alignSelf: 'flex-start' }}
         onPress={() => ask('Retirer cette tâche ?', `${t.e} ${t.n} (${owner.name})`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: async () => { setModal(null); if (await act(D.OPS.remove(found.uid, k))) toast('Tâche retirée'); } }])} />}
       <Btn kind="ghost" label="Fermer" style={{ marginTop: 14 }} onPress={() => setModal(null)} />
     </View>
@@ -694,7 +699,7 @@ export function TasksScreen() {
   const auto = Math.max(1, Math.floor(pool / people));
   const per = fam.perPerson || 0;
   const setF = async (patch) => { try { await D.updateFamily(fam.id, patch); await refresh(); } catch (e) { toast(e.message, 'bad'); } };
-  const redo = () => ask('Refaire la répartition ?', 'Les tâches de cette semaine seront redistribuées et les cases cochées remises à zéro.', [
+  const redo = () => ask('Refaire la répartition ?', (fam.mode || 'auto') === 'auto' ? 'Les tâches de cette semaine seront redistribuées et les cases cochées remises à zéro.' : 'Toutes les tâches de cette semaine retournent dans « À répartir » et les cases cochées sont remises à zéro.', [
     { text: 'Annuler', style: 'cancel' },
     { text: 'Répartir', onPress: async () => { try { await D.buildWeek(fam, members, tasks, false); await refresh(); toast('🔀 Nouvelle répartition faite'); } catch (e) { toast(e.message, 'bad'); } } },
   ]);
@@ -704,6 +709,22 @@ export function TasksScreen() {
         <Card>
           <H2>⚖️ Répartition</H2>
           <Txt muted>{pool} tâches par semaine pour {people} personne{people > 1 ? 's' : ''}.</Txt>
+          <Label>Comment répartir ?</Label>
+          {Object.entries(D.MODES).map(([k, m]) => {
+            const on = (fam.mode || 'auto') === k;
+            return (
+              <Pressable key={k} onPress={() => !on && setF({ mode: k })}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, marginBottom: 8, backgroundColor: on ? '#14301A' : C.bg, borderWidth: 2, borderColor: on ? C.green : C.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+                <Text style={{ fontSize: 26 }}>{m.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: C.ink, fontWeight: '900' }}>{m.name}</Text>
+                  <Text style={{ color: C.muted, fontSize: 13 }}>{m.desc}</Text>
+                </View>
+                {on && <Text style={{ color: C.green, fontWeight: '900', fontSize: 18 }}>✓</Text>}
+              </Pressable>
+            );
+          })}
+          {week && (week.mode || 'auto') !== (fam.mode || 'auto') && <Txt style={{ color: C.yellow, fontSize: 13 }}>Ce mode s'appliquera lundi. Pour l'utiliser dès cette semaine : « Refaire la répartition » plus bas.</Txt>}
           <Label>Tâches par personne et par semaine</Label>
           <Stepper value={per} onChange={(v) => setF({ perPerson: v })} max={40} fmt={(v) => (v === 0 ? `Auto (${auto})` : v)} />
           <Label>Tâches oubliées</Label>
@@ -712,7 +733,7 @@ export function TasksScreen() {
           <Txt muted style={{ fontSize: 13, marginTop: 8, marginBottom: 6 }}>Au maximum :</Txt>
           <Stepper value={fam.penMax ?? 3} onChange={(v) => setF({ penMax: v })} max={10} fmt={(v) => `+${v} / semaine`} />
           <Btn kind="sec" label="🔀 Refaire la répartition de cette semaine" style={{ marginTop: 16 }} onPress={redo} />
-          <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Chaque lundi, la nouvelle semaine se répartit toute seule, en évitant de redonner à chacun les mêmes tâches que les semaines d'avant.</Txt>
+          <Txt muted style={{ fontSize: 12, marginTop: 6 }}>{(fam.mode || 'auto') === 'auto' ? "Chaque lundi, la nouvelle semaine se répartit toute seule, en évitant de redonner à chacun les mêmes tâches que les semaines d'avant." : 'Chaque lundi, toutes les tâches arrivent dans « À répartir » (onglet Mes tâches).'} Dans tous les modes, un parent peut changer qui fait quoi : appui long pour glisser, ou ⋯ sur une tâche.</Txt>
         </Card>
       )}
       <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}>
@@ -972,5 +993,85 @@ function NotifCard() {
         </View>
       )}
     </Card>
+  );
+}
+
+/* ---------- 📦 À répartir (modes « à la main » et « chacun choisit ») ---------- */
+function PoolCard() {
+  const { week, members, isParent, actor, setModal, act, fam } = useCtx();
+  const pool = (week && week.pool) || [];
+  const mode = (week && week.mode) || fam.mode || 'auto';
+  const myCount = D.itemsOf(week, actor.id).length, myTarget = D.targetOf(week, actor.id);
+  const left = Math.max(0, myTarget - myCount);
+  if (!pool.length) return null;
+  const canTake = mode === 'libre' && left > 0;
+  const uids = members.filter((m) => m.active !== false).map((m) => m.id);
+  return (
+    <Card style={{ borderColor: C.yellow, borderWidth: 2 }}>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+        <H2 style={{ marginBottom: 0, flex: 1 }}>📦 À répartir · {pool.length}</H2>
+        {isParent && <Btn small kind="sec" label="⚡ Tout répartir" onPress={() => ask('Répartir le reste ?', 'Les tâches restantes sont données automatiquement, pour que chacun ait son nombre.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Répartir', onPress: async () => { if (await act(D.OPS.fill(uids))) toast('⚡ Tâches réparties'); } }])} />}
+      </Row>
+      <Txt muted style={{ fontSize: 13, marginTop: 4, marginBottom: 8 }}>
+        {mode === 'libre'
+          ? (left > 0 ? `🙋 Choisis encore ${left} tâche${left > 1 ? 's' : ''} : touche celles que tu prends.` : `Tu as tes ${myTarget} tâches. Les autres choisissent les leurs.`)
+          : isParent ? 'Touche une tâche pour la donner à quelqu\'un.' : 'Un parent va répartir ces tâches.'}
+      </Txt>
+      {pool.map((it) => (
+        <Pressable key={it.k} onPress={() => {
+            if (isParent) setModal(<TaskSheet uid={D.POOL} k={it.k} />);
+            else if (canTake) act(D.OPS.take(actor.id, it.k)).then((ok) => ok && toast(`${it.e} est à toi !`));
+            else setModal(<TaskSheet uid={D.POOL} k={it.k} />);
+          }}
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 14, marginBottom: 6, backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, transform: [{ scale: pressed ? 0.97 : 1 }], userSelect: 'none' })}>
+          <Text style={{ fontSize: 22 }}>{it.e}</Text>
+          <Text style={{ color: C.ink, fontWeight: '700', flex: 1 }}>{it.n}{it.d ? `  ·  📅 ${D.DAY_NAMES[it.d]}` : ''}</Text>
+          {(canTake || isParent) && <Text style={{ color: C.green, fontWeight: '900' }}>{isParent && !canTake ? 'Donner ›' : 'Je prends'}</Text>}
+        </Pressable>
+      ))}
+      {mode !== 'auto' && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+          {members.filter((m) => m.active !== false).map((m) => {
+            const c = D.itemsOf(week, m.id).length, tg = D.targetOf(week, m.id);
+            return (
+              <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Avatar m={m} size={22} />
+                <Text style={{ color: c >= tg ? C.green : C.muted, fontWeight: '800', fontSize: 12 }}>{c}/{tg}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </Card>
+  );
+}
+// Dans la fiche d'une tâche « À répartir » : à qui la donner / je la prends
+function PoolTakeButtons({ it }) {
+  const { members, isParent, actor, week, fam, setModal, act } = useCtx();
+  const mode = (week && week.mode) || fam.mode || 'auto';
+  const left = D.targetOf(week, actor.id) - D.itemsOf(week, actor.id).length;
+  const take = async (m) => { setModal(null); if (await act(D.OPS.take(m.id, it.k))) toast(m.id === actor.id ? `${it.e} est à toi !` : `${it.e} donnée à ${m.name}`); };
+  return (
+    <View>
+      {isParent && (
+        <View>
+          <Label>Donner cette tâche à</Label>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {members.filter((m) => m.active !== false).map((m) => {
+              const c = D.itemsOf(week, m.id).length, tg = D.targetOf(week, m.id);
+              return (
+                <Pressable key={m.id} onPress={() => take(m)} style={({ pressed }) => ({ alignItems: 'center', width: 66, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+                  <Avatar m={m} size={42} />
+                  <Text numberOfLines={1} style={{ color: C.ink, fontSize: 12, fontWeight: '700', marginTop: 3 }}>{m.name}</Text>
+                  <Text style={{ color: c >= tg ? C.green : C.muted, fontSize: 11, fontWeight: '800' }}>{c}/{tg}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+      {!isParent && mode === 'libre' && left > 0 && <Btn label="🙋 Je la prends" style={{ marginTop: 12 }} onPress={() => take(actor)} />}
+      {!isParent && mode !== 'libre' && <Txt muted style={{ marginTop: 10 }}>Un parent va la donner à quelqu'un.</Txt>}
+    </View>
   );
 }

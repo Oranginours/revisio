@@ -98,8 +98,15 @@ export function normWeek(w) {
     const ex = (w.extra || {})[u] || 0;
     assign[u] = (list || []).map((it, i) => ({ ...it, k: it.k || doneKey(u, i), x: it.x !== undefined ? it.x : (it.k ? 0 : (i >= (list.length - ex) ? 1 : 0)) }));
   });
-  return { ...w, assign, done: w.done || {}, doing: w.doing || {}, notes: w.notes || {} };
+  return { ...w, assign, pool: w.pool || [], target: w.target || {}, done: w.done || {}, doing: w.doing || {}, notes: w.notes || {} };
 }
+export const MODES = {
+  auto: { icon: '🎲', name: 'Automatique', desc: "L'appli répartit tout chaque lundi, avec le même nombre pour chacun." },
+  manuel: { icon: '✋', name: 'À la main', desc: 'Un parent donne chaque tâche à quelqu\'un (ou répartit le reste en un clic).' },
+  libre: { icon: '🙋', name: 'Chacun choisit', desc: 'Chacun prend ses tâches dans la liste, jusqu\'à son nombre de la semaine.' },
+};
+// Combien de tâches chacun doit avoir cette semaine (base + tâches en plus)
+export const targetOf = (week, uid) => (week && week.target && week.target[uid] !== undefined ? week.target[uid] : (week && week.base) || 0);
 export const itemsOf = (week, uid) => ((week && week.assign && week.assign[uid]) || []);
 export function stats(week, uid) {
   const list = itemsOf(week, uid);
@@ -107,12 +114,15 @@ export function stats(week, uid) {
   return { total: list.length, done };
 }
 export function familyStats(week) {
-  let total = 0, done = 0;
+  let total = (week && week.pool ? week.pool.length : 0), done = 0;
   Object.keys((week && week.assign) || {}).forEach((u) => { const s = stats(week, u); total += s.total; done += s.done; });
   return { total, done };
 }
 export const statusOf = (week, key) => (week && week.done && week.done[key] ? 'done' : week && week.doing && week.doing[key] ? 'doing' : 'todo');
+export const POOL = '__pool';
 export function findItem(week, key) {
+  const p = ((week && week.pool) || []).find((x) => x.k === key);
+  if (p) return { uid: POOL, it: p };
   for (const [u, list] of Object.entries((week && week.assign) || {})) { const it = (list || []).find((x) => x.k === key); if (it) return { uid: u, it }; }
   return null;
 }
@@ -180,8 +190,18 @@ export async function buildWeek(fam, members0, tasks, mustNotExist) {
     if (!w || !w.assign) return;
     Object.entries(w.assign).forEach(([u, list]) => { hist[u] = hist[u] || {}; (list || []).forEach((x) => { hist[u][x.t] = (hist[u][x.t] || 0) + wt; }); });
   });
-  const { assign, base } = distribute(tasks, uids, fam.perPerson || 0, extra, hist);
-  const doc = { assign, done: {}, doing: {}, notes: {}, extra, base, created: Date.now(), by: currentUid() };
+  const mode = fam.mode || 'auto';
+  let assign, base, pool = [];
+  if (mode === 'auto') ({ assign, base } = distribute(tasks, uids, fam.perPerson || 0, extra, hist));
+  else {
+    // à la main / chacun choisit : toutes les tâches de la semaine attendent dans « À répartir »
+    tasks.forEach((t) => { for (let k = 0; k < (t.times || 1); k++) pool.push(itemOf(t)); });
+    pool = shuffle(pool).sort((a, b) => (a.d || 9) - (b.d || 9));
+    assign = Object.fromEntries(uids.map((u) => [u, []]));
+    base = fam.perPerson > 0 ? fam.perPerson : Math.max(1, Math.floor(pool.length / Math.max(1, uids.length)));
+  }
+  const target = Object.fromEntries(uids.map((u) => [u, base + (extra[u] || 0)]));
+  const doc = { assign, pool, target, mode, done: {}, doing: {}, notes: {}, extra, base, created: Date.now(), by: currentUid() };
   try {
     return normWeek(await setDoc(`families/${fam.id}/weeks/${wk}`, doc, mustNotExist));
   } catch (e) {
@@ -195,7 +215,7 @@ export async function buildWeek(fam, members0, tasks, mustNotExist) {
    - next : la semaine modifiée (pour l'écran, tout de suite)
    - patch : ce qu'il faut écrire dans la base
    « fresh: true » = l'opération touche une liste : on relit la semaine juste avant d'écrire. */
-const cloneW = (w) => ({ ...w, assign: { ...(w.assign || {}) }, done: { ...(w.done || {}) }, doing: { ...(w.doing || {}) }, notes: { ...(w.notes || {}) }, extra: { ...(w.extra || {}) } });
+const cloneW = (w) => ({ ...w, pool: (w.pool || []).slice(), assign: { ...(w.assign || {}) }, done: { ...(w.done || {}) }, doing: { ...(w.doing || {}) }, notes: { ...(w.notes || {}) }, extra: { ...(w.extra || {}) } });
 export const OPS = {
   done: (k, on) => ({ fresh: false, run: (w) => { const n = cloneW(w); if (on) n.done[k] = Date.now(); else delete n.done[k]; delete n.doing[k]; return { next: n, patch: { ['done.' + k]: on ? n.done[k] : undefined, ['doing.' + k]: undefined } }; } }),
   doing: (k, on, who) => ({ fresh: false, run: (w) => { const n = cloneW(w); const v = on ? { ts: Date.now(), by: who } : undefined; if (v) n.doing[k] = v; else delete n.doing[k]; delete n.done[k]; return { next: n, patch: { ['doing.' + k]: v, ['done.' + k]: undefined } }; } }),
@@ -225,6 +245,53 @@ export const OPS = {
     n.assign[to] = itemsOf(w, to).concat([moved]);
     const patch = { ['assign.' + from]: n.assign[from], ['assign.' + to]: n.assign[to] };
     if (it.x && n.extra[from]) { n.extra[from] -= 1; patch['extra.' + from] = n.extra[from]; }
+    return { next: n, patch };
+  } }),
+  // prendre une tâche de « À répartir » (pour soi ou pour quelqu'un)
+  take: (uid, k) => ({ fresh: true, run: (w) => {
+    const n = cloneW(w);
+    const it = (w.pool || []).find((x) => x.k === k);
+    if (!it) throw new Error('Quelqu\'un vient de la prendre.');
+    n.pool = (w.pool || []).filter((x) => x.k !== k);
+    n.assign[uid] = itemsOf(w, uid).concat([it]);
+    return { next: n, patch: { pool: n.pool, ['assign.' + uid]: n.assign[uid] } };
+  } }),
+  // remettre une tâche dans « À répartir »
+  release: (uid, k) => ({ fresh: true, run: (w) => {
+    const n = cloneW(w);
+    const it = itemsOf(w, uid).find((x) => x.k === k);
+    if (!it) return { next: w, patch: {} };
+    const back = { ...it }; delete back.x;
+    n.assign[uid] = itemsOf(w, uid).filter((x) => x.k !== k);
+    n.pool = (w.pool || []).concat([back]);
+    delete n.done[k]; delete n.doing[k];
+    const patch = { pool: n.pool, ['assign.' + uid]: n.assign[uid], ['done.' + k]: undefined, ['doing.' + k]: undefined };
+    if (it.x && n.extra[uid]) { n.extra[uid] -= 1; patch['extra.' + uid] = n.extra[uid]; }
+    return { next: n, patch };
+  } }),
+  // répartir automatiquement ce qui reste dans « À répartir », en complétant chacun jusqu'à son nombre
+  fill: (uids) => ({ fresh: true, run: (w) => {
+    const n = cloneW(w);
+    let pool = shuffle(w.pool || []);
+    const patch = {};
+    const need = (u) => Math.max(0, targetOf(w, u) - itemsOf(n, u).length);
+    let guard = 0;
+    while (pool.length && uids.some((u) => need(u) > 0) && guard++ < 1000) {
+      for (const u of uids.slice().sort((a, b) => need(b) - need(a))) {
+        if (!pool.length || need(u) <= 0) continue;
+        const mine = new Set(itemsOf(n, u).map((x) => x.t));
+        let j = pool.findIndex((x) => !mine.has(x.t)); if (j < 0) j = 0;
+        n.assign[u] = itemsOf(n, u).concat([pool.splice(j, 1)[0]]);
+        patch['assign.' + u] = n.assign[u];
+      }
+    }
+    // s'il reste des tâches (tout le monde a son compte), on les partage quand même équitablement
+    while (pool.length && uids.length) {
+      const u = uids.slice().sort((a, b) => itemsOf(n, a).length - itemsOf(n, b).length)[0];
+      n.assign[u] = itemsOf(n, u).concat([pool.shift()]);
+      patch['assign.' + u] = n.assign[u];
+    }
+    n.pool = pool; patch.pool = pool;
     return { next: n, patch };
   } }),
 };

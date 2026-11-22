@@ -46,7 +46,7 @@ export function DragProvider({ children, members, onDrop, onState }) {
               ))}
             </View>
           </View>
-          <Animated.View style={{ position: 'absolute', left: -110, top: -34, transform: [{ translateX: pos.x }, { translateY: pos.y }] }}>
+          <Animated.View style={{ position: 'absolute', left: -110, top: -96, transform: [{ translateX: pos.x }, { translateY: pos.y }] }}>
             <View style={{ width: 220, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card2, borderRadius: 16, padding: 12, borderWidth: 2, borderColor: C.green, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 12, transform: [{ rotate: '-3deg' }] }}>
               <Text style={{ fontSize: 22 }}>{drag.t.e}</Text>
               <Text numberOfLines={2} style={{ color: C.ink, fontWeight: '800', flex: 1 }}>{drag.t.n}</Text>

@@ -235,7 +235,7 @@ export function TaskRow({ it, week, onToggle, onOpen, onLongPress, onPressOut, d
   const late = it.d && it.d < td && !done, today = it.d === td && !done;
   return (
     <Pressable onPress={onToggle || onOpen} onLongPress={onLongPress || onOpen} onPressOut={onPressOut} delayLongPress={delayLongPress || 400}
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: compact ? 10 : 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : today ? C.blue : late ? '#7F1D1D' : C.line, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+      style={({ pressed }) => ({ userSelect: 'none', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: done ? '#14301A' : doing ? '#2E2810' : C.card, borderRadius: 18, padding: compact ? 10 : 14, marginBottom: 8, borderWidth: 2, borderColor: done ? C.greenDark : doing ? '#A16207' : today ? C.blue : late ? '#7F1D1D' : C.line, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
       <Text style={{ fontSize: compact ? 22 : 26 }}>{it.e || '✨'}</Text>
       <View style={{ flex: 1 }}>
         <Text style={{ color: done ? C.muted : C.ink, fontSize: compact ? 15 : 16, fontWeight: '800', textDecorationLine: done ? 'line-through' : 'none' }}>{it.n}</Text>

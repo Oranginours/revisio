@@ -14,6 +14,7 @@ export const S = {
   imported: {},
   devoirs: { manual: [], doneP: {} },
   jobs: [], // générations en arrière-plan (voir jobs.js)
+  cls: { id: '', name: '', code: '', auto: true }, // ma classe (voir classe.js)
 };
 
 export async function load() {
@@ -29,6 +30,7 @@ export async function load() {
     S.imported = o.imported || {};
     if (o.devoirs) S.devoirs = o.devoirs;
     S.jobs = Array.isArray(o.jobs) ? o.jobs : [];
+    if (o.cls) S.cls = o.cls;
   } catch (e) {}
 }
 

@@ -1,10 +1,11 @@
 // Fenêtres : matières, nouveau chapitre, ajout de notes, réglages d'un chapitre.
 import React, { useState } from 'react';
-import { View, Image, Alert } from 'react-native';
+import { View, Image, Alert, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast, ask } from './ui';
 import { uid, parseFr, parseTime, isArchived, toFr, COLORS, normPack, mergePack, promptNotes, promptSkip, items } from './logic';
 import { addJob } from './jobs';
+import { inClass, unshareChapter, syncClass } from './classe';
 import { askPermission } from './notifs';
 import { gemini, prepareImage } from './ai';
 import { reschedule } from './notifs';
@@ -187,6 +188,7 @@ export function ChSettings({ id }) {
   const [mat, setMat] = useState(ch.matiereId);
   const [consigne, setConsigne] = useState(ch.consigne || '');
   const [err, setErr] = useState('');
+  const [, setT] = useState(0);
   const save = () => {
     if (!titre.trim()) return setErr('Le titre ne peut pas être vide.');
     const iso = ds.trim() ? parseFr(ds) : '';
@@ -219,6 +221,12 @@ export function ChSettings({ id }) {
       <Row>{S.profil.matieres.map((m) => <Btn key={m.id} small kind={m.id === mat ? 'pri' : 'sec'} label={m.nom} onPress={() => setMat(m.id)} />)}</Row>
       <Label>🚫 Ce que le prof a dit de ne PAS apprendre</Label>
       <Input multiline style={{ minHeight: 70 }} value={consigne} onChangeText={(t) => { setConsigne(t); setErr(''); }} placeholder="Ex. : pas la partie sur Tolède, pas les dates sauf 476 et 622" />
+      {inClass() && !ch.cls && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+          <Txt style={{ flex: 1 }}>🏫 Partager ce cours avec ma classe</Txt>
+          <Switch value={!ch.noShare} onValueChange={async (v) => { if (v) delete ch.noShare; else { ch.noShare = true; await unshareChapter(ch); } commit(); setT((x) => x + 1); if (v) syncClass({ quiet: true }); }} />
+        </View>
+      )}
       <Btn kind="sec" small label="✨ Masquer automatiquement ces questions" style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={clean} />
       <Txt muted style={{ marginTop: 4 }}>Les prochaines questions créées par l'IA en tiendront compte aussi.</Txt>
       <Err>{err}</Err>

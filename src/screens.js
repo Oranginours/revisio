@@ -17,6 +17,7 @@ import { WakeCard, WakeSettings } from './alarm';
 import { HomeworkCard } from './devoirs';
 import { TomorrowCard, openBagEditor } from './tomorrow';
 import { dailyFresh } from './daily';
+import { ClassSettings, ClassNotes } from './classe';
 import { addJob, jobFor, activeJobs, retryJob, cancelJob, KIND_LABEL } from './jobs';
 
 /* ================= Accueil ================= */
@@ -410,6 +411,7 @@ export function Chapter({ id, tab, setTab }) {
   return (
     <View>
       <JobBanner chId={ch.id} />
+      <ClassNotes ch={ch} />
       {isArchived(ch) && (
         <View style={{ backgroundColor: C.warnSoft, borderRadius: 16, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Txt style={{ flex: 1 }}>🗄️ Archivé : n'apparaît plus dans tes sessions.</Txt>
@@ -505,6 +507,9 @@ export function Settings() {
         <Txt muted style={{ marginTop: 8 }}>Questions dans ta session du jour (+5 quand un DS est dans 3 jours ou moins).</Txt>
         <Btn kind="sec" label={`🎒 Mes classeurs et cahiers${(S.profil.sac || []).length ? ` (${S.profil.sac.length})` : ''}`} style={{ marginTop: 14 }} onPress={() => openBagEditor(setModal)} />
       </Card>
+
+      <Section>🏫 MA CLASSE</Section>
+      <ClassSettings />
 
       <Section>APPARENCE</Section>
       <Card>

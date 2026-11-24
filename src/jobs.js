@@ -8,6 +8,7 @@ import { gemini, prepareImage } from './ai';
 import { normPack, mergePack, promptNotes, promptMore, promptVariants, applyVariants, items, uid } from './logic';
 import { toast } from './ui';
 import { scheduleTimer } from './notifs';
+import { syncClass } from './classe';
 
 const isWeb = Platform.OS === 'web';
 const PER_CALL = 2; // photos par appel à l'IA
@@ -144,6 +145,7 @@ async function runJob(job) {
   // on ne garde pas les travaux finis
   S.jobs = jobs().filter((j) => j.status !== 'done' || Date.now() - j.end < 1000);
   commit();
+  syncClass({ quiet: true }); // le nouveau cours part tout de suite à la classe
 }
 
 /* ---------- La file d'attente ---------- */

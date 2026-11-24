@@ -16,6 +16,7 @@ import { Devoirs, todoCount, fetchHomework } from './src/devoirs';
 import { DefiPlay } from './src/defi';
 import { dailyFresh } from './src/daily';
 import { resumeJobs, retryWaiting } from './src/jobs';
+import { syncClass } from './src/classe';
 
 // Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
 const NAV = [['home', '🏠', 'Accueil'], ['edt', '📅', 'EDT'], ['devoirs', '📝', 'Devoirs'], ['notes', '📊', 'Notes'], ['train', '🧠', "S'entraîner"]].filter((n) => !isWeb || (n[0] !== 'edt' && n[0] !== 'notes'));
@@ -44,9 +45,10 @@ export default function App() {
       if (!isWeb) { silentRefresh().then(() => fetchHomework()).catch(() => {}); setTimeout(() => checkClipboard(go), 800); }
       setTimeout(() => { dailyFresh().catch(() => {}); }, 2500);
       resumeJobs(); // les générations interrompues reprennent
+      setTimeout(() => syncClass({ quiet: false }), 4000); // cours de la classe
     })();
     const sub = AppState.addEventListener('change', (st) => {
-      if (st === 'active') { if (!isWeb) checkClipboard(go); dailyFresh().catch(() => {}); retryWaiting(); }
+      if (st === 'active') { if (!isWeb) checkClipboard(go); dailyFresh().catch(() => {}); retryWaiting(); syncClass({ quiet: false }); }
       else { persistNow(); reschedule(S); }
     });
     return () => sub.remove();

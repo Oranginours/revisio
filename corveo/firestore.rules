@@ -51,5 +51,30 @@ service cloud.firestore {
         allow delete: if isAdmin() || isParent(fid);
       }
     }
+      // ===== Révisio : classes (cours partagés + notes entre élèves) =====
+    function inClass(cid) { return signedIn() && exists(/databases/$(database)/documents/classes/$(cid)/members/$(request.auth.uid)); }
+    match /classCodes/{code} {
+      allow read, create: if signedIn();
+    }
+    match /classes/{cid} {
+      allow read: if isAdmin() || inClass(cid);
+      allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+      allow update: if signedIn() && resource.data.owner == request.auth.uid;
+      match /members/{uid} {
+        allow read: if inClass(cid);
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if signedIn() && (request.auth.uid == uid || get(/databases/$(database)/documents/classes/$(cid)).data.owner == request.auth.uid);
+      }
+      match /chapters/{k} {
+        allow read: if inClass(cid);
+        allow create: if inClass(cid) && request.resource.data.by == request.auth.uid;
+        allow update, delete: if inClass(cid) && resource.data.by == request.auth.uid;
+        match /notes/{n} {
+          allow read: if inClass(cid);
+          allow create: if inClass(cid) && request.resource.data.by == request.auth.uid;
+          allow delete: if inClass(cid) && resource.data.by == request.auth.uid;
+        }
+      }
+    }
   }
 }

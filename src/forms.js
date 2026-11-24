@@ -4,6 +4,8 @@ import { View, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useApp, H2, Txt, Btn, Row, Label, Input, Err, toast, ask } from './ui';
 import { uid, parseFr, parseTime, isArchived, toFr, COLORS, normPack, mergePack, promptNotes, promptSkip, items } from './logic';
+import { addJob } from './jobs';
+import { askPermission } from './notifs';
 import { gemini, prepareImage } from './ai';
 import { reschedule } from './notifs';
 import { S, commit, matOf, chaptersOf } from './store';
@@ -117,14 +119,13 @@ export function ChapitreForm({ mid }) {
       return;
     }
     if (!S.settings.apiKey) return setErr("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.");
-    const m = S.profil.matieres.find((x) => x.id === mat);
-    try {
-      const pack = await runAI('Création de ton chapitre', () => generate({ uris, text: txt.trim(), matiere: m.nom, titre: titre.trim(), consigne: consigne.trim() }));
-      if (!items({ pack }).length && !pack.resume.length) throw new Error("L'IA n'a rien trouvé de lisible. Essaie des photos plus nettes.");
-      const id = uid();
-      S.chs[id] = { id, matiereId: mat, titre: titre.trim(), ds: dsIso || '', dsTime: tIso || '', pack, srs: {}, auto: {}, skip: {}, consigne: consigne.trim(), created: Date.now() };
-      commit(); setModal(null); reschedule(S); go({ name: 'ch', id, tab: 'cours' });
-    } catch (e) { setErr(e.message); }
+    // le chapitre est créé tout de suite ; l'IA le remplit en arrière-plan
+    const id = uid();
+    S.chs[id] = { id, matiereId: mat, titre: titre.trim(), ds: dsIso || '', dsTime: tIso || '', pack: normPack({}), srs: {}, auto: {}, skip: {}, consigne: consigne.trim(), created: Date.now() };
+    commit(); setModal(null); reschedule(S); go({ name: 'ch', id, tab: 'cours' });
+    toast("⏳ L'IA crée ton chapitre en arrière-plan. Tu peux faire autre chose, je te préviens quand c'est prêt !");
+    askPermission().catch(() => {});
+    addJob({ kind: 'chapter', chId: id, uris, text: txt.trim() });
   };
   return (
     <View>
@@ -157,11 +158,11 @@ export function AddNotesForm({ id }) {
   const [err, setErr] = useState('');
   const add = async () => {
     if (!uris.length && !txt.trim()) return setErr('Ajoute au moins une photo ou du texte.');
-    try {
-      const extra = await runAI('Ajout de tes notes', () => generate({ uris, text: txt.trim(), matiere: matOf(ch).nom, titre: ch.titre, existing: ch.pack, consigne: ch.consigne }));
-      ch.pack = mergePack(ch.pack, extra); commit(); setModal(null);
-      toast(`Ajouté ✨ ${extra.vocab.length + extra.qcm.length + extra.vf.length} nouvelles fiches et questions`);
-    } catch (e) { setErr(e.message); }
+    if (!S.settings.apiKey) return setErr("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.");
+    setModal(null);
+    toast("⏳ Ajout de tes notes en arrière-plan. Je te préviens quand c'est fini !");
+    askPermission().catch(() => {});
+    addJob({ kind: 'notes', chId: ch.id, uris, text: txt.trim() });
   };
   return (
     <View>

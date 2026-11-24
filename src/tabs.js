@@ -6,6 +6,7 @@ import { shuffle, items, mastery, grade, num, promptCorrect, promptExplain, pick
 import { S, commit, matOf } from './store';
 import { gemini } from './ai';
 import { ChapterGrades } from './school';
+import { addXp } from './progress';
 
 /* ---------- une question (fiche, QCM ou vrai/faux) ---------- */
 // it = { t: 'v'|'q'|'f', x, id?, ch? }. onSkip : marque la question « pas à apprendre ».
@@ -332,32 +333,60 @@ export function TOrdre({ ch }) {
 }
 
 /* ---------- Exercices ---------- */
+const LVL = { 1: ['🟢', 'Facile'], 2: ['🟠', 'Moyen'], 3: ['🔴', 'Difficile'] };
 export function TExos({ ch, onMore }) {
   const { C } = useApp(); const E = ch.pack.exercices;
-  const [order] = useState(() => shuffle(E.map((_, i) => i)));
+  const [lv, setLv] = useState(0); // 0 = tous
+  // du plus facile au plus difficile (mélangés à l'intérieur d'un même niveau)
+  const [rnd] = useState(() => E.map(() => Math.random()));
+  const order = E.map((_, k) => k).filter((k) => !lv || (E[k].niveau || 2) === lv).sort((a, b) => ((E[a].niveau || 2) - (E[b].niveau || 2)) || rnd[a] - rnd[b]);
   const [i, setI] = useState(0);
   const [val, setVal] = useState('');
   const [res, setRes] = useState(null); // null | 'ok' | 'bad' | 'sol'
   const [hint, setHint] = useState('');
+  const [tips, setTips] = useState(0); // indices de méthode affichés
   const [err, setErr] = useState('');
   const [tried, setTried] = useState(false);
   const [score, setScore] = useState({ ok: 0, tot: 0 });
   if (!E.length) return <Card><Txt muted>Pas d'exercices pour ce chapitre.</Txt><Btn label="✨ Demander des exercices à l'IA" style={{ marginTop: 10 }} onPress={onMore} /></Card>;
-  const x = E[order[i % order.length]] || E[0];
-  const count = (good) => { if (!tried) { setTried(true); setScore((s) => ({ ok: s.ok + (good ? 1 : 0), tot: s.tot + 1 })); } };
+  const n = order.length;
+  const idx = n ? order[i % n] : 0;
+  const x = E[idx] || E[0];
+  const done = (ch.exoOk || {})[idx];
+  const count = (good) => {
+    if (tried) return;
+    setTried(true); setScore((s) => ({ ok: s.ok + (good ? 1 : 0), tot: s.tot + 1 }));
+    if (good) { ch.exoOk = { ...(ch.exoOk || {}), [idx]: true }; addXp(10 + 5 * ((x.niveau || 2) - 1)); commit(); }
+  };
   const check = () => {
     const v = num(val), a = num(x.reponse);
     if (isNaN(v)) return setErr('Entre un nombre.');
     const good = Math.abs(v - a) <= Math.abs(a) * 0.02 + 1e-9; count(good);
-    setHint(!good && a && (Math.abs(v - a * 1000) <= Math.abs(a * 1000) * 0.02 || Math.abs(v - a / 1000) <= Math.abs(a / 1000) * 0.02) ? ' 💡 Tu es à un facteur 1000 près : vérifie tes conversions.' : ' Réessaie ou regarde la correction.');
+    setHint(!good && a && (Math.abs(v - a * 1000) <= Math.abs(a * 1000) * 0.02 || Math.abs(v - a / 1000) <= Math.abs(a / 1000) * 0.02) ? ' 💡 Tu es à un facteur 1000 près : vérifie tes conversions.' : (x.methode || []).length > tips ? ' Prends un indice 💡 pour la méthode.' : ' Réessaie ou regarde la correction.');
     setRes(good ? 'ok' : 'bad');
   };
-  const next = () => { setI(i + 1); setVal(''); setRes(null); setErr(''); setTried(false); };
+  const next = () => { setI(i + 1); setVal(''); setRes(null); setErr(''); setTried(false); setTips(0); };
+  const counts = [1, 2, 3].map((l) => E.filter((e) => (e.niveau || 2) === l).length);
+  const [ic, lab] = LVL[x.niveau || 2];
   return (
     <View>
+      <Row style={{ marginBottom: 10 }}>
+        {[0, 1, 2, 3].map((l) => (l && !counts[l - 1] ? null : (
+          <Btn key={l} small kind={lv === l ? 'pri' : 'sec'} label={l ? `${LVL[l][0]} ${LVL[l][1]} (${counts[l - 1]})` : `Tous (${E.length})`} onPress={() => { setLv(l); setI(0); setVal(''); setRes(null); setTips(0); setTried(false); }} />
+        )))}
+      </Row>
+      {!n ? <Card><Txt muted>Aucun exercice de ce niveau.</Txt></Card> : (
       <Card>
-        <Txt muted>Exercice {(i % E.length) + 1} / {E.length}{score.tot ? ` · réussis du premier coup : ${score.ok} / ${score.tot}` : ''}</Txt>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Txt muted>Exercice {(i % n) + 1} / {n}{score.tot ? ` · réussis du 1er coup : ${score.ok}/${score.tot}` : ''}</Txt>
+          <Text style={{ fontWeight: '800', color: C.muted, fontSize: 13 }}>{ic} {lab}{done ? ' · ✅' : ''}</Text>
+        </Row>
         <Rich style={{ marginVertical: 10 }}>{x.enonce}</Rich>
+        {(x.methode || []).slice(0, tips).map((t, k) => (
+          <View key={k} style={{ backgroundColor: C.warnSoft, borderRadius: 12, padding: 10, marginBottom: 6 }}>
+            <Rich style={{ fontSize: 14 }}>{`💡 ${t}`}</Rich>
+          </View>
+        ))}
         {x.numerique ? (
           <Row style={{ flexWrap: 'nowrap' }}>
             <Input style={{ flex: 1 }} value={val} onChangeText={(t) => { setVal(t); setErr(''); }} keyboardType="decimal-pad" placeholder="Ta réponse" onSubmitEditing={check} />
@@ -367,13 +396,15 @@ export function TExos({ ch, onMore }) {
         <Err>{err}</Err>
         <Row style={{ marginTop: 10 }}>
           {x.numerique && <Btn label="Vérifier" onPress={check} />}
+          {(x.methode || []).length > tips && res !== 'ok' && res !== 'sol' && <Btn kind="sec" label={`💡 Indice ${tips + 1}/${x.methode.length}`} onPress={() => setTips(tips + 1)} />}
           <Btn kind="sec" label="Correction" onPress={() => { count(false); setRes('sol'); }} />
           <Btn kind="sec" label="Suivant ➜" onPress={next} />
         </Row>
         {res === 'bad' && <Fb ok={false}><Txt>❌ Pas encore.{hint}</Txt></Fb>}
         {(res === 'ok' || res === 'sol') && <Fb ok><Rich style={{ fontSize: 15 }}>{(res === 'ok' ? '<b>✅ Juste !</b>\n' : '') + `<b>Correction</b> (réponse : ${x.reponse} ${x.unite})\n${x.correction}`}</Rich></Fb>}
       </Card>
-      <Btn kind="ghost" label="✨ Encore des exercices" onPress={onMore} style={{ alignSelf: 'flex-start' }} />
+      )}
+      <Btn kind="ghost" label="✨ Encore des exercices (avec d'autres valeurs)" onPress={onMore} style={{ alignSelf: 'flex-start' }} />
     </View>
   );
 }

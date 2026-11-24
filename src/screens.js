@@ -17,6 +17,7 @@ import { WakeCard, WakeSettings } from './alarm';
 import { HomeworkCard } from './devoirs';
 import { TomorrowCard, openBagEditor } from './tomorrow';
 import { dailyFresh } from './daily';
+import { addJob, jobFor, activeJobs, retryJob, cancelJob, KIND_LABEL } from './jobs';
 
 /* ================= Accueil ================= */
 export function Home() {
@@ -99,6 +100,7 @@ export function Home() {
         </View>
       </FadeIn>
 
+      <JobBanner />
       <WebInstall />
       <GettingStarted />
       <TomorrowCard />
@@ -389,37 +391,25 @@ export function Chapter({ id, tab, setTab }) {
   const ch = S.chs[id], m = matOf(ch), p = ch.pack;
   const tabs = TABS.filter(([k]) => (k === 'ordre' ? p.ordres.length : k === 'redac' ? p.ouvertes.length : k === 'vf' ? p.vf.length : k === 'fiches' ? p.vocab.length : k === 'quiz' ? p.qcm.length : true));
   const cur = tabs.some((t) => t[0] === tab) ? tab : 'cours';
-  const more = async (kind) => {
+  const more = (kind) => {
     if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
-    try {
-      const add = normPack(await runAI(kind === 'ex' ? 'Nouveaux exercices' : 'Nouvelles questions', () => gemini({ apiKey: S.settings.apiKey, model: S.settings.model, prompt: promptMore(ch, m.nom, kind) })));
-      const n = add.qcm.length + add.vf.length + add.exercices.length;
-      if (!n) throw new Error("L'IA n'a pas renvoyé de questions. Réessaie.");
-      ch.pack = mergePack(ch.pack, { qcm: add.qcm, vf: add.vf, exercices: add.exercices }); commit();
-      toast(`✨ ${n} nouvelles questions ajoutées`);
-    } catch (e) { toast(e.message, 'bad'); }
+    if (jobFor(ch.id)) return toast("L'IA travaille déjà sur ce chapitre, patience…", 'info');
+    addJob({ kind: 'more', chId: ch.id, moreKind: kind });
+    toast(kind === 'ex' ? "⏳ L'IA prépare de nouveaux exercices en arrière-plan" : "⏳ L'IA prépare de nouvelles questions en arrière-plan");
   };
-  const vary = async () => {
+  const vary = () => {
     if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
-    const qIdx = p.qcm.map((_, i) => i), fIdx = p.vf.map((_, i) => i);
-    if (!qIdx.length && !fIdx.length) return toast("Ce chapitre n'a pas encore de questions.", 'info');
-    try {
-      let n = 0;
-      await runAI('Nouvelles formulations', async () => {
-        for (let k = 0; k < Math.max(qIdx.length, fIdx.length); k += 20) {
-          const r = await gemini({ apiKey: S.settings.apiKey, model: S.settings.model, prompt: promptVariants(ch, qIdx.slice(k, k + 20), fIdx.slice(k, k + 20)) });
-          n += applyVariants(ch, r);
-        }
-      }, "L'IA reformule tes questions et équilibre les réponses…");
-      commit();
-      toast(`🔀 ${n} questions reformulées, choix équilibrés`);
-    } catch (e) { toast(e.message, 'bad'); }
+    if (!p.qcm.length && !p.vf.length) return toast("Ce chapitre n'a pas encore de questions.", 'info');
+    if (jobFor(ch.id)) return toast("L'IA travaille déjà sur ce chapitre, patience…", 'info');
+    addJob({ kind: 'vary', chId: ch.id });
+    toast("⏳ L'IA reformule tes questions en arrière-plan");
   };
   const Tab = { cours: TCours, fiches: TFiches, quiz: TPractice, vf: TPractice, ordre: TOrdre, exos: TExos, redac: TRedac, bilan: TBilan }[cur];
   const size = items(ch, true).length + p.exercices.length;
   const mast = mastery(ch);
   return (
     <View>
+      <JobBanner chId={ch.id} />
       {isArchived(ch) && (
         <View style={{ backgroundColor: C.warnSoft, borderRadius: 16, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Txt style={{ flex: 1 }}>🗄️ Archivé : n'apparaît plus dans tes sessions.</Txt>
@@ -617,6 +607,43 @@ export function Settings() {
         <Btn kind="ghost" small label="Charger les 2 chapitres d'exemple" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={loadExamples} />
       </Card>
       <Txt muted center style={{ marginTop: 6, fontSize: 12 }}>Révisio · fait avec Claude</Txt>
+    </View>
+  );
+}
+
+/* ---------- ⏳ Générations en cours ---------- */
+export function JobBanner({ chId }) {
+  const { C } = useApp();
+  const list = chId ? activeJobs().filter((j) => j.chId === chId) : activeJobs();
+  if (!list.length) return null;
+  return (
+    <View>
+      {list.map((j) => {
+        const ch = S.chs[j.chId];
+        const pct = j.chunks && j.chunks.length ? j.done / j.chunks.length : 0;
+        const wait = j.status === 'wait', err = j.status === 'error', prep = j.status === 'prep';
+        const secs = wait ? Math.max(0, Math.round(((j.next || 0) - Date.now()) / 1000)) : 0;
+        return (
+          <View key={j.id} style={{ backgroundColor: err ? C.badSoft : C.priSoft, borderRadius: 16, padding: 12, marginBottom: 12 }}>
+            <Row style={{ flexWrap: 'nowrap' }}>
+              <Text style={{ fontSize: 20 }}>{err ? '⚠️' : wait ? '📡' : '⏳'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.ink, fontWeight: '800' }}>{KIND_LABEL[j.kind]}{!chId && ch ? ` · ${ch.titre}` : ''}</Text>
+                <Text style={{ color: C.muted, fontSize: 12 }}>
+                  {err ? j.err : wait ? `${j.err || 'Connexion perdue'} · nouvel essai ${secs > 60 ? `dans ${Math.round(secs / 60)} min` : `dans ${secs} s`}` : prep ? 'Préparation des photos…' : j.chunks.length > 1 ? `Partie ${Math.min(j.done + 1, j.chunks.length)} sur ${j.chunks.length} · tu peux faire autre chose` : 'En cours · tu peux faire autre chose'}
+                </Text>
+              </View>
+            </Row>
+            {!err && j.chunks && j.chunks.length > 1 && <View style={{ marginTop: 8 }}><Progress value={pct} /></View>}
+            {(wait || err) && (
+              <Row style={{ marginTop: 8 }}>
+                <Btn small label="🔄 Réessayer" onPress={() => retryJob(j.id)} />
+                <Btn small kind="ghost" label="Annuler" onPress={() => ask('Annuler ?', j.done ? 'Ce qui est déjà créé est gardé.' : 'La génération sera abandonnée.', [{ text: 'Non', style: 'cancel' }, { text: 'Annuler la génération', style: 'destructive', onPress: () => cancelJob(j.id) }])} />
+              </Row>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }

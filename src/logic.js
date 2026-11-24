@@ -40,7 +40,7 @@ export const SCHEMA = `{
  "qcm": [{"q":"question","variantes":["la même question posée autrement","..."],"choix":["...","...","...","..."],"bonne":0,"expl":"explication courte"}],
  "vf": [{"a":"affirmation","variantes":["la même affirmation dite autrement (même valeur vrai/faux)","..."],"vrai":true,"expl":"explication courte"}],
  "ordres": [{"titre":"Remets dans l'ordre : ...","etapes":[{"t":"étape ou événement SANS sa date","d":"date ou précision montrée après correction (peut être vide)"}]}],
- "exercices": [{"enonce":"...","reponse":"20","unite":"g/L","numerique":true,"correction":"correction détaillée"}],
+ "exercices": [{"enonce":"...","niveau":1,"methode":["indice 1 : quelle formule ou quelle étape utiliser","indice 2 : ...","indice 3 : ..."],"reponse":"20","unite":"g/L","numerique":true,"correction":"correction détaillée, étape par étape"}],
  "ouvertes": [{"q":"question de rédaction type contrôle","attendus":"éléments attendus dans une bonne réponse"}],
  "competences": ["Je sais ..."]
 }`;
@@ -55,7 +55,11 @@ export const RULES = `Règles :
 - QCM : les 4 choix doivent avoir à peu près la MÊME LONGUEUR et le même style. La bonne réponse ne doit PAS être la plus longue, la plus précise ou la plus nuancée : un élève ne doit pas pouvoir la deviner à sa forme. Les mauvaises réponses sont plausibles (vraies notions du chapitre, mais pas la bonne ici).
 - "variantes" : pour chaque QCM et chaque vrai/faux, donne 2 ou 3 autres façons de poser la même question (autres mots, autre angle, question inversée…), qui ont exactement la même bonne réponse.
 - Dans "ordres", donne les étapes dans le BON ordre (l'appli les mélange). Utilise "ordres" pour les frises chronologiques et les protocoles ; [] s'il n'y en a pas.
-- "exercices" : seulement si la matière comporte des calculs ou des exercices à réponse précise ; sinon []. "reponse" est une chaîne ; "numerique" vaut true si la réponse est un nombre (mets le nombre seul dans "reponse").`;
+- "exercices" : seulement si la matière comporte des calculs, des méthodes ou des exercices à réponse précise (maths, physique-chimie, SVT, SES, économie, techno…) ; sinon []. Dans ce cas fais-en BEAUCOUP (8 à 15), de TOUS les types d'exercices vus dans le cours (applications directes, calculs, conversions, méthodes, problèmes), du plus facile au plus difficile :
+  - "niveau" : 1 = application directe, 2 = classique de contrôle, 3 = difficile / plusieurs étapes. Mets-en de chaque niveau.
+  - "methode" : 2 à 4 indices progressifs qui expliquent LA MÉTHODE (quelle formule, quelle étape, quel piège), SANS donner la réponse.
+  - "reponse" est une chaîne ; "numerique" vaut true si la réponse est un nombre (mets le nombre seul dans "reponse", unité dans "unite").
+  - "correction" : la résolution complète, étape par étape, comme sur une copie.`;
 
 export function normPack(p) {
   p = p && typeof p === 'object' ? p : {};
@@ -79,6 +83,8 @@ export function normPack(p) {
     exercices: A('exercices').filter((x) => x && x.enonce).map((x) => ({
       enonce: s(x.enonce), reponse: s(x.reponse), unite: s(x.unite),
       numerique: x.numerique === true && !isNaN(num(x.reponse)), correction: s(x.correction),
+      niveau: [1, 2, 3].includes(Number(x.niveau)) ? Number(x.niveau) : 2,
+      methode: Array.isArray(x.methode) ? x.methode.map(s).filter(Boolean).slice(0, 5) : [],
     })),
     ouvertes: A('ouvertes').filter((x) => x && x.q).map((x) => ({ q: s(x.q), attendus: s(x.attendus) })),
     competences: A('competences').map(s).filter(Boolean),
@@ -99,7 +105,7 @@ export function promptNotes({ matiere, titre, text, nImages, existing, consigne 
     ? `Un élève ajoute de nouvelles notes à son chapitre « ${titre} » (${matiere}). Voici ce que son pack contient déjà : ${packSummary(existing)}
 Génère UNIQUEMENT de NOUVEAUX éléments tirés des nouvelles notes, sans doublons avec l'existant.`
     : `Un élève m'envoie ses notes de cours pour le chapitre « ${titre} » en ${matiere}. Crée son pack de révision complet.
-Quantités visées (selon la richesse des notes) : resume 3-8 parties, vocab 8-25, qcm 15-30, vf 10-20, ordres 0-4, exercices 0-12, ouvertes 2-5, competences 3-8.`;
+Quantités visées (selon la richesse des notes) : resume 3-8 parties, vocab 8-25, qcm 15-30, vf 10-20, ordres 0-4, exercices 0-15 (8 à 15 dès que le cours a des calculs ou des méthodes), ouvertes 2-5, competences 3-8.`;
   return `${intro}
 ${consigne ? 'IMPORTANT : le prof a dit de NE PAS apprendre ceci, ne crée AUCUN contenu dessus : ' + consigne + '\n' : ''}${text ? 'Notes tapées par l\'élève :\n"""' + text.slice(0, 20000) + '"""\n' : ''}${nImages ? nImages + ' photo(s) de ses notes sont jointes.\n' : ''}
 ${RULES}
@@ -109,7 +115,7 @@ ${SCHEMA}`;
 export function promptMore(ch, matiere, kind) {
   const p = ch.pack;
   const want = kind === 'ex'
-    ? '8 nouveaux "exercices" variés (autres valeurs, autres situations), et des tableaux vides pour le reste'
+    ? '10 nouveaux "exercices" variés (autres valeurs, autres situations, tous les types d\'exercices du cours), du niveau 1 au niveau 3, avec "methode" et "correction" détaillées, et des tableaux vides pour le reste'
     : kind === 'daily'
     ? '6 nouveaux "qcm" et 4 nouveaux "vf" sur des points du cours encore peu ou pas interrogés (angles différents, pièges classiques, applications), et des tableaux vides pour le reste'
     : `12 nouveaux "qcm", 8 nouveaux "vf"${p.exercices.length ? ', 6 nouveaux "exercices"' : ''}, et des tableaux vides pour le reste`;

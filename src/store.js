@@ -13,6 +13,7 @@ export const S = {
   cache: { edt: {}, grades: {}, gradesPeriods: [], gradesAt: '', dsSeen: {} },
   imported: {},
   devoirs: { manual: [], doneP: {} },
+  jobs: [], // générations en arrière-plan (voir jobs.js)
 };
 
 export async function load() {
@@ -27,6 +28,7 @@ export async function load() {
     Object.assign(S.cache, o.cache || {});
     S.imported = o.imported || {};
     if (o.devoirs) S.devoirs = o.devoirs;
+    S.jobs = Array.isArray(o.jobs) ? o.jobs : [];
   } catch (e) {}
 }
 

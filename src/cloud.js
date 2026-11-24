@@ -94,7 +94,7 @@ export async function deleteAccount() {
 }
 let refreshing = null;
 async function token() {
-  if (!auth) throw new Error('Pas connecté');
+  if (!auth) await ensureAuth(); // après un redémarrage : on relit le compte enregistré
   if (Date.now() < auth.exp) return auth.idToken;
   if (!refreshing) {
     refreshing = (async () => {

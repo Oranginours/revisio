@@ -39,19 +39,23 @@ export function Train() {
       <Text style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{sub}</Text>
     </Pressable>
   );
-  if (!S.profil.matieres.length) return <Card><Txt muted>Ajoute d'abord une matière et un chapitre depuis l'accueil.</Txt></Card>;
+  const noMat = !S.profil.matieres.length;
   return (
     <View>
-      <Txt muted>Matières à réviser (rien de coché = toutes)</Txt>
-      <Row style={{ marginVertical: 10 }}>{S.profil.matieres.map((m) => <Btn key={m.id} small kind={mats.includes(m.id) ? 'pri' : 'sec'} label={m.nom} onPress={() => toggle(m.id)} />)}</Row>
+      {noMat ? <Card><Txt muted>Ajoute une matière et un chapitre depuis l'accueil pour débloquer les révisions de tes cours. Les exos de maths marchent déjà !</Txt></Card> : (
+        <View>
+          <Txt muted>Matières à réviser (rien de coché = toutes)</Txt>
+          <Row style={{ marginVertical: 10 }}>{S.profil.matieres.map((m) => <Btn key={m.id} small kind={mats.includes(m.id) ? 'pri' : 'sec'} label={m.nom} onPress={() => toggle(m.id)} />)}</Row>
+        </View>
+      )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
         <T icon="🧮" title="Exos de maths" sub={`5 niveaux : Noob → God${S.profil.maths ? ` · ${S.profil.maths.done} faits` : ''}`} onPress={() => go({ name: 'tool', tool: 'maths', back: 'train' })} />
-        <T icon="⚡" title="Mode rapide" sub="20 questions en vrac" onPress={() => go({ name: 'session', mode: 'rapide', mats, back: 'train' })} />
-        <T icon="⏱️" title="Défi 60 s" sub={`Record : ${S.profil.best.eclair || 0}`} onPress={() => go({ name: 'tool', tool: 'eclair', mats, back: 'train' })} />
+        <T icon="⚡" title="Mode rapide" disabled={noMat} sub="20 questions en vrac" onPress={() => go({ name: 'session', mode: 'rapide', mats, back: 'train' })} />
+        <T icon="⏱️" title="Défi 60 s" disabled={noMat} sub={`Record : ${S.profil.best.eclair || 0}`} onPress={() => go({ name: 'tool', tool: 'eclair', mats, back: 'train' })} />
         <T icon="❌" title="Mes erreurs" sub={nErr ? `${nErr} à revoir` : 'Aucune pour l\'instant'} disabled={!nErr} onPress={() => go({ name: 'session', mode: 'erreurs', mats, back: 'train' })} />
-        <T icon="✍️" title="Texte à trous" sub="Complète ton cours" onPress={() => go({ name: 'tool', tool: 'trous', mats, back: 'train' })} />
-        <T icon="🔁" title="Fiches inversées" sub="Définition → mot" onPress={() => go({ name: 'tool', tool: 'inverse', mats, back: 'train' })} />
-        <T icon="📝" title="Examen blanc" sub="Note sur 20" onPress={() => go({ name: 'tool', tool: 'exam', mats, back: 'train' })} />
+        <T icon="✍️" title="Texte à trous" disabled={noMat} sub="Complète ton cours" onPress={() => go({ name: 'tool', tool: 'trous', mats, back: 'train' })} />
+        <T icon="🔁" title="Fiches inversées" disabled={noMat} sub="Définition → mot" onPress={() => go({ name: 'tool', tool: 'inverse', mats, back: 'train' })} />
+        <T icon="📝" title="Examen blanc" disabled={noMat} sub="Note sur 20" onPress={() => go({ name: 'tool', tool: 'exam', mats, back: 'train' })} />
         <T icon="🍅" title="Pomodoro" sub="25 min de concentration" onPress={() => go({ name: 'tool', tool: 'pomodoro', back: 'train' })} />
         <T icon="📈" title="Mes progrès" sub="Niveau, stats, badges" onPress={() => go({ name: 'progres', back: 'train' })} />
         <T icon="⚔️" title="Défier un pote" sub="Même quiz, meilleur score" onPress={() => setModal(<DefiPicker />)} />

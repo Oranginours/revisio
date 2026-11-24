@@ -288,7 +288,7 @@ function Play({ lvl, mode, quit }) {
         <Text style={{ color: L.color, fontWeight: '900' }}>{L.icon} {L.name} · {q.t}</Text>
         <Text style={{ color: C.muted, fontWeight: '800' }}>{chrono ? `⏱️ ${left} s · ${score} ✓` : `${i + 1}/${N_Q} · ${score} ✓`}{combo >= 3 ? `  🔥${combo}` : ''}</Text>
       </Row>
-      <Progress value={chrono ? left / 60 : (i + (res ? 1 : 0)) / N_Q} />
+      <Progress value={(chrono ? left / 60 : (i + (res ? 1 : 0)) / N_Q) * 100} />
       <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <Card style={{ marginTop: 12, alignItems: 'center', paddingVertical: 24 }}>
           <Text style={{ color: C.ink, fontSize: q.q.length > 40 ? 19 : 26, fontWeight: '900', textAlign: 'center', lineHeight: q.q.length > 40 ? 27 : 34 }}>{q.q}</Text>

@@ -630,7 +630,10 @@ export function JobBanner({ chId }) {
     <View>
       {list.map((j) => {
         const ch = S.chs[j.chId];
-        const pct = j.chunks && j.chunks.length ? j.done / j.chunks.length : 0;
+        // avancement : parties finies + estimation de la partie en cours (~90 s par partie)
+        const nChunks = (j.chunks && j.chunks.length) || 1;
+        const cur = j.status === 'running' && j.since ? Math.min(0.95, (Date.now() - j.since) / 90000) : 0;
+        const pct = Math.round(((j.done + cur) / nChunks) * 100);
         const wait = j.status === 'wait', err = j.status === 'error', prep = j.status === 'prep';
         const secs = wait ? Math.max(0, Math.round(((j.next || 0) - Date.now()) / 1000)) : 0;
         return (
@@ -644,7 +647,7 @@ export function JobBanner({ chId }) {
                 </Text>
               </View>
             </Row>
-            {!err && j.chunks && j.chunks.length > 1 && <View style={{ marginTop: 8 }}><Progress value={pct} /></View>}
+            {!err && !prep && <View style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={{ flex: 1 }}><Progress value={pct} /></View><Text style={{ color: C.muted, fontSize: 12, fontWeight: '800' }}>{pct} %</Text></View>}
             {!err && !wait && j.since && j.status === 'running' && Date.now() - j.since > 45000 && <Text style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>C'est normal : l'IA écrit beaucoup de fiches et de questions (souvent 1 à 3 min par partie).</Text>}
             {!err && !wait && j.status === 'running' && <Row style={{ marginTop: 6 }}><Btn small kind="ghost" label="Annuler" onPress={() => ask('Annuler ?', j.done ? 'Ce qui est déjà créé est gardé.' : 'La génération sera abandonnée.', [{ text: 'Non', style: 'cancel' }, { text: 'Annuler la génération', style: 'destructive', onPress: () => cancelJob(j.id) }])} /></Row>}
             {(wait || err) && (

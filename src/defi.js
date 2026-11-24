@@ -144,7 +144,7 @@ export function DefiPlay({ id }) {
         <Txt muted bold>⚔️ {d.from ? `Défi de ${d.from.name}` : 'Ton défi'} · {i + 1}/{n}</Txt>
         <Txt bold style={{ color: C.pri }}>{score} ✓</Txt>
       </Row>
-      <Progress value={(i + (pick !== null ? 1 : 0)) / n} />
+      <Progress value={((i + (pick !== null ? 1 : 0)) / n) * 100} />
       <FadeIn key={i}>
         <Card style={{ marginTop: 12 }}>
           <Rich style={{ fontSize: 18, fontWeight: '800' }}>{q.q}</Rich>

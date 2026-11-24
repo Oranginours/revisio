@@ -1,6 +1,7 @@
 // Onglet « S'entraîner » : modes de révision et outils pour mieux apprendre.
 import React, { useState, useEffect, useRef } from 'react';
 import { DefiPicker, DefiList } from './defi';
+import { Maths } from './maths';
 import { View, Text, Pressable } from 'react-native';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Opt, Fb, Progress, Input, Rich, Note } from './ui';
 import { shuffle, items, grade, randomItems, errorItems, buildCloze, norm, stripTags, num, today, pickPhrase } from './logic';
@@ -44,6 +45,7 @@ export function Train() {
       <Txt muted>Matières à réviser (rien de coché = toutes)</Txt>
       <Row style={{ marginVertical: 10 }}>{S.profil.matieres.map((m) => <Btn key={m.id} small kind={mats.includes(m.id) ? 'pri' : 'sec'} label={m.nom} onPress={() => toggle(m.id)} />)}</Row>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
+        <T icon="🧮" title="Exos de maths" sub={`5 niveaux : Noob → God${S.profil.maths ? ` · ${S.profil.maths.done} faits` : ''}`} onPress={() => go({ name: 'tool', tool: 'maths', back: 'train' })} />
         <T icon="⚡" title="Mode rapide" sub="20 questions en vrac" onPress={() => go({ name: 'session', mode: 'rapide', mats, back: 'train' })} />
         <T icon="⏱️" title="Défi 60 s" sub={`Record : ${S.profil.best.eclair || 0}`} onPress={() => go({ name: 'tool', tool: 'eclair', mats, back: 'train' })} />
         <T icon="❌" title="Mes erreurs" sub={nErr ? `${nErr} à revoir` : 'Aucune pour l\'instant'} disabled={!nErr} onPress={() => go({ name: 'session', mode: 'erreurs', mats, back: 'train' })} />
@@ -66,9 +68,10 @@ export function Tool({ tool, mats }) {
   if (tool === 'inverse') return <Inverse mats={mats} />;
   if (tool === 'exam') return <Exam mats={mats} />;
   if (tool === 'pomodoro') return <Pomodoro />;
+  if (tool === 'maths') return <Maths />;
   return <Conseils />;
 }
-export const TOOL_TITLES = { eclair: '⏱️ Défi 60 secondes', trous: '✍️ Texte à trous', inverse: '🔁 Fiches inversées', exam: '📝 Examen blanc', pomodoro: '🍅 Pomodoro', conseils: '💡 Bien apprendre' };
+export const TOOL_TITLES = { maths: '🧮 Exos de maths', eclair: '⏱️ Défi 60 secondes', trous: '✍️ Texte à trous', inverse: '🔁 Fiches inversées', exam: '📝 Examen blanc', pomodoro: '🍅 Pomodoro', conseils: '💡 Bien apprendre' };
 
 /* ================= Défi 60 s ================= */
 function Eclair({ mats }) {

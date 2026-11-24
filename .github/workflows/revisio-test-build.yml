@@ -1,0 +1,30 @@
+# Outil de test : exporte la version web de Corvéo dans la branche « revisio-build » (pour la tester hors ligne).
+name: Révisio · export de test
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Export web
+        working-directory: .
+        run: |
+          npm ci
+          npx expo install react-dom react-native-web @expo/metro-runtime
+          npx expo export --platform web --output-dir /tmp/out
+      - name: Pousser dans la branche revisio-build
+        run: |
+          cd /tmp/out
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b revisio-build
+          git add -A
+          git commit -qm "export de test"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" revisio-build

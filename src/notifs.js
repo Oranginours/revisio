@@ -49,6 +49,7 @@ export async function reschedule(S) {
     const hwFor = (day) => {
       const out = [];
       (S.cache.hw || []).forEach((h) => { const done = doneP[h.id] !== undefined ? doneP[h.id] : h.done; if (!done && h.due === day) out.push(h.subject); });
+      if (S.sko) (S.cache.hwEnt || []).forEach((h) => { const done = dv.doneE && dv.doneE[h.id] !== undefined ? dv.doneE[h.id] : h.done; if (!done && h.due === day) out.push(h.subject); });
       (dv.manual || []).forEach((h) => { if (!h.done && h.due === day) out.push(((S.profil.matieres || []).find((m) => m.id === h.mid) || {}).nom || 'Autre'); });
       return out;
     };

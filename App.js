@@ -16,6 +16,7 @@ import { Devoirs, todoCount, fetchHomework } from './src/devoirs';
 import { DefiPlay } from './src/defi';
 import { dailyFresh } from './src/daily';
 import { resumeJobs, retryWaiting } from './src/jobs';
+import { fetchEntHomework } from './src/skolengo';
 import { syncClass } from './src/classe';
 
 // Dans le navigateur, pas de Pronote : on cache l'emploi du temps et les notes
@@ -42,7 +43,7 @@ export default function App() {
       await load();
       setReady(true);
       reschedule(S);
-      if (!isWeb) { silentRefresh().then(() => fetchHomework()).catch(() => {}); setTimeout(() => checkClipboard(go), 800); }
+      if (!isWeb) { silentRefresh().then(() => fetchHomework()).catch(() => {}); fetchEntHomework().catch(() => {}); setTimeout(() => checkClipboard(go), 800); }
       setTimeout(() => { dailyFresh().catch(() => {}); }, 2500);
       resumeJobs(); // les générations interrompues reprennent
       setTimeout(() => syncClass({ quiet: false }), 4000); // cours de la classe

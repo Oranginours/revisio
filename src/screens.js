@@ -18,6 +18,7 @@ import { HomeworkCard } from './devoirs';
 import { TomorrowCard, openBagEditor } from './tomorrow';
 import { dailyFresh } from './daily';
 import { ClassSettings, ClassNotes } from './classe';
+import { EntSettings } from './ent';
 import { addJob, jobFor, activeJobs, retryJob, cancelJob, KIND_LABEL } from './jobs';
 
 /* ================= Accueil ================= */
@@ -548,6 +549,7 @@ export function Settings() {
           </View>
         )}
       </Card>
+      <EntSettings />
       </>}
 
       <Section>INTELLIGENCE ARTIFICIELLE</Section>

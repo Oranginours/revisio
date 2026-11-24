@@ -7,6 +7,7 @@ import { uid, dstr, today, addDays, diffDays, fmtDate, parseFr, stripTags } from
 import { S, commit } from './store';
 import { withSession, matiereFor } from './school';
 import { reschedule } from './notifs';
+import { fetchEntHomework, setEntDone } from './skolengo';
 
 const D = () => {
   S.devoirs = S.devoirs || {};
@@ -46,17 +47,22 @@ export function allHomework() {
     const mid = matiereFor(h.subject);
     return { ...h, src: 'pronote', done: d.doneP[h.id] !== undefined ? d.doneP[h.id] : h.done, mid, color: (mid && mat(mid) && mat(mid).couleur) || h.color };
   });
+  const e = (S.sko ? S.cache.hwEnt || [] : []).map((h) => {
+    const mid = matiereFor(h.subject);
+    return { ...h, src: 'ent', done: d.doneE && d.doneE[h.id] !== undefined ? d.doneE[h.id] : h.done, mid, color: (mid && mat(mid) && mat(mid).couleur) || h.color };
+  });
   const m = d.manual.map((h) => {
     const mm = mat(h.mid);
     return { ...h, src: 'moi', subject: mm ? mm.nom : h.subject || 'Autre', color: mm ? mm.couleur : '#94A3B8' };
   });
-  return [...p, ...m].sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : (a.subject < b.subject ? -1 : 1)));
+  return [...p, ...e, ...m].sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : (a.subject < b.subject ? -1 : 1)));
 }
 export const todoCount = (day) => allHomework().filter((h) => !h.done && (day ? h.due === day : h.due >= today())).length;
 
 function toggle(h) {
   const d = D();
   if (h.src === 'moi') { const x = d.manual.find((y) => y.id === h.id); if (x) x.done = !x.done; }
+  else if (h.src === 'ent') { d.doneE = d.doneE || {}; d.doneE[h.id] = !h.done; setEntDone(h.id, !h.done).catch(() => {}); }
   else { d.doneP[h.id] = !h.done; pushDone(h.id, !h.done); }
   commit(); reschedule(S);
   if (!h.done) toast('✅ Fait !');
@@ -162,7 +168,7 @@ function HwRow({ h }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Dot color={h.color || C.pri} size={8} />
           <Text style={{ color: C.muted, fontSize: 12, fontWeight: '800', flex: 1 }} numberOfLines={1}>{h.subject.toUpperCase()}</Text>
-          <Text style={{ color: C.muted, fontSize: 11 }}>{h.src === 'moi' ? '✍️ moi' : 'Pronote'}{h.files ? ' · 📎' : ''}</Text>
+          <Text style={{ color: C.muted, fontSize: 11 }}>{h.src === 'moi' ? '✍️ moi' : h.src === 'ent' ? '📚 ENT' : 'Pronote'}{h.files ? ' · 📎' : ''}</Text>
         </View>
         <Text style={{ color: C.ink, fontSize: 15, marginTop: 2, textDecorationLine: h.done ? 'line-through' : 'none' }} numberOfLines={open ? undefined : 3}>{h.text || '(pas de détail)'}</Text>
         {open && (
@@ -181,7 +187,14 @@ export function Devoirs() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [showDone, setShowDone] = useState(false);
-  const load = async () => { if (!S.pronote || isWeb) return; setLoading(true); setErr(''); try { await fetchHomework(); } catch (e) { setErr(e.message); } setLoading(false); };
+  const load = async () => {
+    if ((!S.pronote && !S.sko) || isWeb) return;
+    setLoading(true); setErr('');
+    const errs = [];
+    if (S.pronote) { try { await fetchHomework(); } catch (e) { errs.push('Pronote : ' + e.message); } }
+    if (S.sko) { try { await fetchEntHomework(); } catch (e) { errs.push('ENT : ' + e.message); } }
+    setErr(errs.join('\n')); setLoading(false);
+  };
   useEffect(() => { load(); }, []);
   useEffect(() => { pull.fn = load; return () => { pull.fn = null; }; });
   const all = allHomework();
@@ -203,7 +216,7 @@ export function Devoirs() {
         <Btn label="＋ Ajouter" onPress={() => openHomeworkForm(setModal)} />
       </Card>
       {err ? <Txt muted style={{ color: C.bad, marginBottom: 8 }}>{err}</Txt> : null}
-      {!S.pronote && !isWeb && <Txt muted style={{ marginBottom: 8 }}>Connecte Pronote (⚙️) pour récupérer aussi les devoirs donnés par les profs.</Txt>}
+      {!S.pronote && !S.sko && !isWeb && <Txt muted style={{ marginBottom: 8 }}>Connecte Pronote ou l'ENT (⚙️ → École) pour récupérer aussi les devoirs donnés par les profs.</Txt>}
 
       {late.length > 0 && (
         <Card>
@@ -228,7 +241,7 @@ export function Devoirs() {
       {showDone && done.length > 0 && <Card>{done.map((h) => <HwRow key={h.src + h.id} h={h} />)}</Card>}
 
       <Row style={{ marginTop: 4 }}>
-        {S.pronote && !isWeb && <Btn small kind="ghost" label={loading ? 'Mise à jour…' : '🔄 Actualiser'} onPress={load} />}
+        {(S.pronote || S.sko) && !isWeb && <Btn small kind="ghost" label={loading ? 'Mise à jour…' : '🔄 Actualiser'} onPress={load} />}
         {S.cache.hwAt ? <Txt muted style={{ fontSize: 12 }}>Pronote : {fmtDate(S.cache.hwAt.slice(0, 10))}</Txt> : null}
       </Row>
       <Txt muted style={{ fontSize: 12, marginTop: 6 }}>Coche la case quand c'est fait. Appui long sur un devoir que tu as ajouté pour le modifier.</Txt>

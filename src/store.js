@@ -31,6 +31,7 @@ export async function load() {
     if (o.devoirs) S.devoirs = o.devoirs;
     S.jobs = Array.isArray(o.jobs) ? o.jobs : [];
     if (o.cls) S.cls = o.cls;
+    if (o.sko) S.sko = o.sko; // connexion à l'ENT Skolengo
   } catch (e) {}
 }
 

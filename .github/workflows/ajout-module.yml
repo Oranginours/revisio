@@ -1,0 +1,34 @@
+# Outil : ajoute un module compatible avec la version d'Expo (npx expo install) et enregistre package.json + package-lock.json.
+name: Ajouter un module
+on:
+  workflow_dispatch:
+    inputs:
+      paquets:
+        description: "Modules à ajouter (séparés par des espaces)"
+        required: true
+      dossier:
+        description: "Dossier de l'appli (. pour Révisio, corveo pour Corvéo)"
+        required: false
+        default: "."
+permissions:
+  contents: write
+jobs:
+  ajout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Installer
+        working-directory: ${{ inputs.dossier }}
+        run: |
+          npm ci || npm install
+          npx expo install ${{ inputs.paquets }}
+      - name: Enregistrer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ${{ inputs.dossier }}/package.json ${{ inputs.dossier }}/package-lock.json
+          git commit -m "Ajout de : ${{ inputs.paquets }}" || echo "rien à enregistrer"
+          git push

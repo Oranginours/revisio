@@ -61,7 +61,8 @@ export async function addJob({ kind, chId, uris = [], text = '', moreKind, label
   commit();
   try {
     // 1) on prépare les photos tout de suite (sur le téléphone, sans internet) et on les met de côté
-    for (let i = 0; i < uris.length; i++) job.imgs.push(saveImg(id, i, await prepareImage(uris[i])));
+    for (let i = 0; i < uris.length; i++) { job.stage = `Préparation des photos (${i + 1}/${uris.length})…`; commit(); job.imgs.push(saveImg(id, i, await prepareImage(uris[i]))); }
+    job.stage = '';
     // 2) on découpe en morceaux
     if (kind === 'chapter' || kind === 'notes') {
       for (let i = 0; i < Math.max(1, job.imgs.length); i += PER_CALL) job.chunks.push(job.imgs.length ? [i, Math.min(job.imgs.length, i + PER_CALL)] : [0, 0]);
@@ -116,6 +117,7 @@ async function runJob(job) {
   job.status = 'running'; job.err = ''; commit();
   for (let k = job.done; k < job.chunks.length; k++) {
     try {
+      job.since = Date.now(); job.err = ''; commit();
       await runChunk(job, k);
       job.done = k + 1; job.tries = 0;
       commit(); // ✅ ce morceau est sauvegardé

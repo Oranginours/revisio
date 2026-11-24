@@ -31,7 +31,7 @@ export async function gemini({ apiKey, model, prompt, images = [], json = true }
   for (const m of models) {
     let r;
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 150000) : null; // connexion coupée : on n'attend pas indéfiniment
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 300000) : null; // connexion coupée : on n'attend pas indéfiniment
     try {
       r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
         method: 'POST',

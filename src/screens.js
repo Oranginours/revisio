@@ -612,9 +612,12 @@ export function Settings() {
 }
 
 /* ---------- ⏳ Générations en cours ---------- */
+const el = (t) => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}`; };
 export function JobBanner({ chId }) {
   const { C } = useApp();
   const list = chId ? activeJobs().filter((j) => j.chId === chId) : activeJobs();
+  const [, tick] = useState(0);
+  React.useEffect(() => { if (!list.length) return; const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, [list.length]);
   if (!list.length) return null;
   return (
     <View>
@@ -630,11 +633,13 @@ export function JobBanner({ chId }) {
               <View style={{ flex: 1 }}>
                 <Text style={{ color: C.ink, fontWeight: '800' }}>{KIND_LABEL[j.kind]}{!chId && ch ? ` · ${ch.titre}` : ''}</Text>
                 <Text style={{ color: C.muted, fontSize: 12 }}>
-                  {err ? j.err : wait ? `${j.err || 'Connexion perdue'} · nouvel essai ${secs > 60 ? `dans ${Math.round(secs / 60)} min` : `dans ${secs} s`}` : prep ? 'Préparation des photos…' : j.chunks.length > 1 ? `Partie ${Math.min(j.done + 1, j.chunks.length)} sur ${j.chunks.length} · tu peux faire autre chose` : 'En cours · tu peux faire autre chose'}
+                  {err ? j.err : wait ? `${j.err || 'Connexion perdue'} · nouvel essai ${secs > 60 ? `dans ${Math.round(secs / 60)} min` : `dans ${secs} s`}` : prep ? (j.stage || 'Préparation des photos…') : `${j.chunks.length > 1 ? `Partie ${Math.min(j.done + 1, j.chunks.length)} sur ${j.chunks.length}` : "L'IA écrit"}${j.since && j.status === 'running' ? ` · ${el(j.since)}` : j.status === 'queued' ? ' · en file d\'attente' : ''} · tu peux faire autre chose`}
                 </Text>
               </View>
             </Row>
             {!err && j.chunks && j.chunks.length > 1 && <View style={{ marginTop: 8 }}><Progress value={pct} /></View>}
+            {!err && !wait && j.since && j.status === 'running' && Date.now() - j.since > 45000 && <Text style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>C'est normal : l'IA écrit beaucoup de fiches et de questions (souvent 1 à 3 min par partie).</Text>}
+            {!err && !wait && j.status === 'running' && <Row style={{ marginTop: 6 }}><Btn small kind="ghost" label="Annuler" onPress={() => ask('Annuler ?', j.done ? 'Ce qui est déjà créé est gardé.' : 'La génération sera abandonnée.', [{ text: 'Non', style: 'cancel' }, { text: 'Annuler la génération', style: 'destructive', onPress: () => cancelJob(j.id) }])} /></Row>}
             {(wait || err) && (
               <Row style={{ marginTop: 8 }}>
                 <Btn small label="🔄 Réessayer" onPress={() => retryJob(j.id)} />

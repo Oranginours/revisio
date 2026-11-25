@@ -142,15 +142,11 @@ export function ClassSettings() {
     <Card>
       <Txt muted>Rejoins ta classe : tous les cours que vous créez sont partagés automatiquement, et chacun peut laisser des petites notes pour les autres (« attention, la prof a dit que… »).</Txt>
       <Label>Rejoindre avec un code</Label>
-      <Row style={{ flexWrap: 'nowrap' }}>
-        <Input style={{ flex: 1, letterSpacing: 4, fontWeight: '800', textAlign: 'center' }} value={code} onChangeText={(t) => setCode(t.toUpperCase())} autoCapitalize="characters" placeholder="ABC234" maxLength={8} />
-        <Btn label="Rejoindre" disabled={busy || code.length < 4} onPress={() => run(() => joinClass(code), '🏫 Bienvenue dans la classe !')} />
-      </Row>
+      <Input style={{ letterSpacing: 4, fontWeight: '800', textAlign: 'center', fontSize: 20 }} value={code} onChangeText={(t) => setCode(t.toUpperCase())} autoCapitalize="characters" placeholder="ABC234" maxLength={8} />
+      <Btn label="Rejoindre la classe" style={{ marginTop: 8 }} disabled={busy || code.length < 4} onPress={() => run(() => joinClass(code), '🏫 Bienvenue dans la classe !')} />
       <Label>Ou créer la classe</Label>
-      <Row style={{ flexWrap: 'nowrap' }}>
-        <Input style={{ flex: 1 }} value={name} onChangeText={setName} placeholder="ex. 1re 4 – Carnot" />
-        <Btn kind="sec" label="Créer" disabled={busy} onPress={() => run(() => createClass(name), '🏫 Classe créée : partage le code !')} />
-      </Row>
+      <Input value={name} onChangeText={setName} placeholder="ex. 1re 4 – Carnot" />
+      <Btn kind="sec" label="Créer la classe" style={{ marginTop: 8 }} disabled={busy} onPress={() => run(() => createClass(name), '🏫 Classe créée : partage le code !')} />
       {busy && <ActivityIndicator style={{ marginTop: 10 }} />}
       <Err>{err}</Err>
       {!S.profil.prenom && <Txt muted style={{ fontSize: 12, marginTop: 8 }}>Pense à mettre ton prénom (section TOI) : c'est lui que verront les autres.</Txt>}
@@ -246,10 +242,8 @@ export function ClassNotes({ ch }) {
               ))}
             </View>
           )}
-          <Row style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}>
-            <Input style={{ flex: 1 }} value={text} onChangeText={setText} placeholder="Une petite note pour la classe…" multiline />
-            <Btn small label="Envoyer" disabled={busy || !text.trim()} onPress={send} />
-          </Row>
+          <Input value={text} onChangeText={setText} placeholder="Une petite note pour la classe…" multiline />
+          <Btn small label="Envoyer" style={{ marginTop: 8, alignSelf: 'flex-end' }} disabled={busy || !text.trim()} onPress={send} />
           {ch.cls && <Btn small kind="ghost" label="Ne plus recevoir ce cours" style={{ alignSelf: 'flex-start', marginTop: 8 }} onPress={() => ask('Retirer ce cours ?', 'Il sera supprimé de ton appli et ne reviendra pas.', [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => { go({ name: 'home' }); setTimeout(() => hideClassChapter(ch), 50); } }])} />}
         </View>
       )}

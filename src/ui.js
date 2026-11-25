@@ -201,7 +201,7 @@ export function Input(props) {
   const { C } = useApp();
   return (
     <TextInput placeholderTextColor={C.muted} {...props}
-      style={[{ borderWidth: 1.5, borderColor: C.line, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11, fontSize: 16, color: C.ink, backgroundColor: C.card }, props.multiline && { minHeight: 120, textAlignVertical: 'top' }, props.style]} />
+      style={[{ minWidth: 0, borderWidth: 1.5, borderColor: C.line, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11, fontSize: 16, color: C.ink, backgroundColor: C.card }, props.multiline && { minHeight: 120, textAlignVertical: 'top' }, props.style]} />
   );
 }
 export function Err({ children }) {

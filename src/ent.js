@@ -68,10 +68,8 @@ export function EntSettings() {
     <Card>
       <Txt bold>📚 ENT Skolengo (Ma classe en Auvergne-Rhône-Alpes…)</Txt>
       <Txt muted style={{ fontSize: 13, marginTop: 4 }}>Pour récupérer les devoirs que les profs mettent dans le cahier de textes de l'ENT. Cherche ton lycée :</Txt>
-      <Row style={{ flexWrap: 'nowrap', marginTop: 10 }}>
-        <Input style={{ flex: 1 }} value={q} onChangeText={setQ} placeholder="ex. Hippolyte Carnot Roanne" onSubmitEditing={search} />
-        <Btn small label="Chercher" disabled={busy} onPress={search} />
-      </Row>
+      <Input style={{ marginTop: 10 }} value={q} onChangeText={setQ} placeholder="ex. Hippolyte Carnot Roanne" onSubmitEditing={search} />
+      <Btn small label="🔎 Chercher" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={busy} onPress={search} />
       {busy && <ActivityIndicator style={{ marginTop: 10 }} />}
       {(list || []).map((sc) => (
         <Pressable key={sc.id} onPress={() => choose(sc)} style={({ pressed }) => ({ paddingVertical: 11, borderTopWidth: 1, borderColor: C.line, opacity: pressed ? 0.6 : 1 })}>

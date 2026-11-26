@@ -561,6 +561,7 @@ export function Settings() {
           <Input style={{ flex: 1 }} value={key} onChangeText={setKey} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder="AIza…" />
           <Btn small kind="ghost" label={show ? '🙈' : '👁️'} onPress={() => setShow(!show)} />
         </Row>
+        <ExtraKeys />
         <Label>Modèle</Label>
         <Input value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} />
         <Txt muted style={{ marginTop: 6, fontSize: 12 }}>Change-le seulement si l'IA dit « modèle introuvable ».</Txt>
@@ -659,6 +660,37 @@ export function JobBanner({ chId }) {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+/* ---------- Clés Gemini supplémentaires ---------- */
+function ExtraKeys() {
+  const { C } = useApp();
+  const st = S.settings;
+  const [k, setK] = useState('');
+  const [, setT] = useState(0);
+  const list = st.apiKeys || [];
+  const add = () => {
+    const v = k.trim();
+    if (!v) return;
+    if (v === st.apiKey || list.includes(v)) return toast('Cette clé est déjà enregistrée', 'info');
+    st.apiKeys = [...list, v]; setK(''); commit(); setT((x) => x + 1); toast('🔑 Clé ajoutée');
+  };
+  const del = (i) => { st.apiKeys = list.filter((_, j) => j !== i); commit(); setT((x) => x + 1); };
+  const hide = (v) => v.slice(0, 6) + '…' + v.slice(-4);
+  return (
+    <View>
+      <Label>Clés de secours {list.length ? `(${list.length})` : ''}</Label>
+      <Txt muted style={{ fontSize: 12, marginBottom: 6 }}>Quand une clé atteint sa limite gratuite (ou ne marche plus), l'appli passe toute seule à la suivante.</Txt>
+      {list.map((v, i) => (
+        <View key={v} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderColor: C.line }}>
+          <Text style={{ color: C.ink, flex: 1, fontWeight: '700' }}>🔑 Clé {i + 2} · {hide(v)}</Text>
+          <Pressable hitSlop={10} onPress={() => ask('Retirer cette clé ?', hide(v), [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => del(i) }])}><Text style={{ color: C.muted, fontSize: 16 }}>✕</Text></Pressable>
+        </View>
+      ))}
+      <Input value={k} onChangeText={setK} autoCapitalize="none" autoCorrect={false} placeholder="Coller une autre clé AIza…" onSubmitEditing={add} />
+      <Btn small kind="sec" label="＋ Ajouter cette clé" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={!k.trim()} onPress={add} />
     </View>
   );
 }

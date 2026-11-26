@@ -1,5 +1,6 @@
 // Appels à l'IA Gemini (avec la clé de chaque utilisateur) et préparation des photos.
 import * as ImageManipulator from 'expo-image-manipulator';
+import { S } from './store';
 
 export const DEFAULT_MODEL = 'gemini-3.6-flash';
 // Si un modèle n'existe plus (Google en change souvent), on essaie les suivants.
@@ -23,7 +24,33 @@ function errText(status, j) {
 }
 
 // images : tableau de chaînes base64 (JPEG)
-export async function gemini({ apiKey, model, prompt, images = [], json = true }) {
+// Plusieurs clés possibles : si une clé atteint sa limite (ou ne marche pas), on passe à la suivante.
+export function allKeys(first) {
+  const st = S.settings || {};
+  const list = [first, st.apiKey, ...(st.apiKeys || [])].map((k) => String(k || '').trim()).filter(Boolean);
+  return list.filter((k, i) => list.indexOf(k) === i);
+}
+let goodKey = 0; // la dernière clé qui a marché
+export async function gemini(opts) {
+  const keys = allKeys(opts.apiKey);
+  if (!keys.length) throw new Error("Ajoute d'abord ta clé Gemini dans les réglages (⚙️).");
+  let last;
+  for (let n = 0; n < keys.length; n++) {
+    const k = keys[(goodKey + n) % keys.length];
+    try {
+      const r = await geminiOnce({ ...opts, apiKey: k });
+      goodKey = (goodKey + n) % keys.length;
+      return r;
+    } catch (e) {
+      last = e;
+      // limite atteinte (429), clé refusée (400/401/403) : on essaie la clé suivante
+      if (![400, 401, 403, 429].includes(e.status) || keys.length < 2) throw e;
+    }
+  }
+  if (last && last.status === 429 && keys.length > 1) last.message = `Toutes tes clés (${keys.length}) ont atteint leur limite pour l'instant. Réessaie un peu plus tard.`;
+  throw last;
+}
+async function geminiOnce({ apiKey, model, prompt, images = [], json = true }) {
   if (!apiKey) throw new Error("Ajoute d'abord ta clé Gemini dans les réglages (⚙️).");
   const parts = [{ text: prompt }, ...images.map((data) => ({ inline_data: { mime_type: 'image/jpeg', data } }))];
   const body = { contents: [{ role: 'user', parts }], generationConfig: json ? { responseMimeType: 'application/json' } : {} };

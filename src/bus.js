@@ -131,7 +131,7 @@ function Direction({ dir, kind, save }) {
     if (!r.canceled) setUris([...uris, ...r.assets.map((a) => a.uri)].slice(0, 4));
   };
   const read = async () => {
-    if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages (section IA).", 'bad');
+    if (!S.settings.apiKey) return toast("Ajoute d'abord une clé IA dans ⚙️ Réglages (section IA).", 'bad');
     if (!dir.stop.trim()) return toast("Écris d'abord le nom de ton arrêt.", 'bad');
     try {
       const r = await runAI('Lecture des horaires', async () => {

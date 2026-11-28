@@ -161,7 +161,7 @@ export function ShareChoice({ ch }) {
 export async function exportBackup() {
   try {
     const data = { v: 1, kind: 'revisio-sauvegarde', at: new Date().toISOString(), profil: S.profil, chs: S.chs, devoirs: S.devoirs,
-      settings: { ...S.settings, apiKey: '' } }; // jamais la clé IA ni la connexion Pronote dans un fichier
+      settings: { ...S.settings, apiKey: '', apiKeys: [], keys: undefined } }; // jamais la clé IA ni la connexion Pronote dans un fichier
     await saveFile(`revisio-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data), 'Enregistrer ma sauvegarde');
     if (isWeb) toast('Sauvegarde téléchargée 💾');
     S.settings.lastBackup = new Date().toISOString(); commit();
@@ -177,8 +177,8 @@ export async function importBackup() {
     ask('Restaurer la sauvegarde ?', `${n} chapitre${n > 1 ? 's' : ''} du ${String(d.at).slice(0, 10)}. Tes données actuelles seront remplacées.`, [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Restaurer', style: 'destructive', onPress: () => {
-        const key = S.settings.apiKey;
-        Object.assign(S.profil, d.profil || {}); S.chs = d.chs; if (d.devoirs) S.devoirs = d.devoirs; Object.assign(S.settings, d.settings || {}, { apiKey: key });
+        const { apiKey: key, apiKeys, keys } = S.settings; // tes clés IA restent celles de ce téléphone
+        Object.assign(S.profil, d.profil || {}); S.chs = d.chs; if (d.devoirs) S.devoirs = d.devoirs; Object.assign(S.settings, d.settings || {}, { apiKey: key, apiKeys, keys });
         commit(); reschedule(S); toast('Sauvegarde restaurée ✅');
       } },
     ]);

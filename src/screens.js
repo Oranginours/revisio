@@ -4,7 +4,7 @@ import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react
 import * as Updates from 'expo-updates';
 import { useApp, Card, H2, Txt, Btn, Row, Chip, Dot, DsBadge, Progress, Label, Input, Err, IconBtn, FadeIn, Pop, toast, ACCENTS, makeTheme, ask, isWeb } from './ui';
 import { planFor, today, addDays, diffDays, fmtDate, longDate, dayLetter, isArchived, items, mastery, grade, buildSession, randomItems, errorItems, dsInfo, normPack, mergePack, promptMore, promptVariants, applyVariants } from './logic';
-import { gemini, DEFAULT_MODEL } from './ai';
+import { gemini, PROVIDERS, providerOf, keyList, syncKeys } from './ai';
 import { askPermission, reschedule, testNotification } from './notifs';
 import { Item, skipItem, TCours, TFiches, TPractice, TOrdre, TExos, TRedac, TBilan } from './tabs';
 import { S, commit, matOf, activeChs } from './store';
@@ -45,7 +45,7 @@ export function Home() {
             <Btn kind="ghost" label="Essayer avec 2 chapitres d'exemple" onPress={loadExamples} />
           </View>
         </FadeIn>
-        {!S.settings.apiKey && <Txt muted center style={{ marginTop: 16 }}>Pour que l'IA lise tes photos, ajoute ta clé Gemini gratuite dans ⚙️ Réglages.</Txt>}
+        {!S.settings.apiKey && <Txt muted center style={{ marginTop: 16 }}>Pour que l'IA lise tes photos, ajoute une clé IA (Gemini gratuite, ou ChatGPT, Claude…) dans ⚙️ Réglages.</Txt>}
       </View>
     );
   }
@@ -394,13 +394,13 @@ export function Chapter({ id, tab, setTab }) {
   const tabs = TABS.filter(([k]) => (k === 'ordre' ? p.ordres.length : k === 'redac' ? p.ouvertes.length : k === 'vf' ? p.vf.length : k === 'fiches' ? p.vocab.length : k === 'quiz' ? p.qcm.length : true));
   const cur = tabs.some((t) => t[0] === tab) ? tab : 'cours';
   const more = (kind) => {
-    if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
+    if (!S.settings.apiKey) return toast("Ajoute d'abord une clé IA dans ⚙️ Réglages.", 'bad');
     if (jobFor(ch.id)) return toast("L'IA travaille déjà sur ce chapitre, patience…", 'info');
     addJob({ kind: 'more', chId: ch.id, moreKind: kind });
     toast(kind === 'ex' ? "⏳ L'IA prépare de nouveaux exercices en arrière-plan" : "⏳ L'IA prépare de nouvelles questions en arrière-plan");
   };
   const vary = () => {
-    if (!S.settings.apiKey) return toast("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.", 'bad');
+    if (!S.settings.apiKey) return toast("Ajoute d'abord une clé IA dans ⚙️ Réglages.", 'bad');
     if (!p.qcm.length && !p.vf.length) return toast("Ce chapitre n'a pas encore de questions.", 'info');
     if (jobFor(ch.id)) return toast("L'IA travaille déjà sur ce chapitre, patience…", 'info');
     addJob({ kind: 'vary', chId: ch.id });
@@ -470,14 +470,10 @@ function Seg({ options, value, onChange }) {
 export function Settings() {
   const { C, setModal, runAI } = useApp();
   const st = S.settings;
-  const [key, setKey] = useState(st.apiKey);
-  const [show, setShow] = useState(false);
-  const [model, setModel] = useState(st.model);
   const [time, setTime] = useState(st.notifTime);
   const [prenom, setPrenom] = useState(S.profil.prenom || '');
   const [err, setErr] = useState('');
   const set = (k, v) => { st[k] = v; commit(); };
-  const saveAI = () => { st.apiKey = key.trim(); st.model = model.trim() || DEFAULT_MODEL; commit(); toast('Clé enregistrée ✅'); };
   const toggle = async (v) => {
     if (v && !(await askPermission())) { toast("Autorise les notifications pour l'appli dans les réglages du téléphone.", 'bad'); return; }
     st.notifOn = v; commit(); reschedule(S);
@@ -554,18 +550,8 @@ export function Settings() {
 
       <Section>INTELLIGENCE ARTIFICIELLE</Section>
       <Card>
-        <Txt muted>L'IA lit tes photos et crée les questions. Elle a besoin d'internet et d'une clé Gemini. Ta clé reste sur ton téléphone : elle n'est jamais partagée.</Txt>
-        <Btn kind="sec" small label="Obtenir une clé (aistudio.google.com)" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => Linking.openURL('https://aistudio.google.com/apikey')} />
-        <Label>Clé API Gemini {st.apiKey ? '✅' : ''}</Label>
-        <Row style={{ flexWrap: 'nowrap' }}>
-          <Input style={{ flex: 1 }} value={key} onChangeText={setKey} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder="AIza…" />
-          <Btn small kind="ghost" label={show ? '🙈' : '👁️'} onPress={() => setShow(!show)} />
-        </Row>
-        <ExtraKeys />
-        <Label>Modèle</Label>
-        <Input value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} />
-        <Txt muted style={{ marginTop: 6, fontSize: 12 }}>Change-le seulement si l'IA dit « modèle introuvable ».</Txt>
-        <Btn label="Enregistrer" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={saveAI} />
+        <Txt muted>L'IA lit tes photos et crée les questions. Elle a besoin d'internet et d'au moins une clé : Gemini (gratuite) ou une clé payante ChatGPT, Claude, Mistral ou OpenRouter. Tes clés restent sur ton téléphone : elles ne sont jamais partagées.</Txt>
+        <AIKeys />
         <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap', marginTop: 16 }}>
           <View style={{ flex: 1 }}>
             <Txt bold>✨ Nouvelles questions chaque jour</Txt>
@@ -664,33 +650,75 @@ export function JobBanner({ chId }) {
   );
 }
 
-/* ---------- Clés Gemini supplémentaires ---------- */
-function ExtraKeys() {
+/* ---------- Clés IA (plusieurs fournisseurs, avec relais automatique) ---------- */
+function AIKeys() {
   const { C } = useApp();
-  const st = S.settings;
-  const [k, setK] = useState('');
   const [, setT] = useState(0);
-  const list = st.apiKeys || [];
+  const [p, setP] = useState('gemini');
+  const [k, setK] = useState('');
+  const [model, setModel] = useState('');
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState(-1); // modifier le modèle d'une clé
+  const [editModel, setEditModel] = useState('');
+  const list = keyList();
+  const prov = PROVIDERS[p];
+  const save = (l) => { S.settings.keys = l; syncKeys(); commit(); setT((x) => x + 1); };
   const add = () => {
     const v = k.trim();
     if (!v) return;
-    if (v === st.apiKey || list.includes(v)) return toast('Cette clé est déjà enregistrée', 'info');
-    st.apiKeys = [...list, v]; setK(''); commit(); setT((x) => x + 1); toast('🔑 Clé ajoutée');
+    if (list.some((x) => x.key === v)) return toast('Cette clé est déjà enregistrée', 'info');
+    if (p === 'gemini' && !/^AIza/.test(v)) toast('Une clé Gemini commence normalement par « AIza »', 'info');
+    save([...list, { p, key: v, model: model.trim() }]); setK(''); setModel(''); toast(`🔑 Clé ${prov.name.split(' ')[0]} ajoutée`);
   };
-  const del = (i) => { st.apiKeys = list.filter((_, j) => j !== i); commit(); setT((x) => x + 1); };
+  const del = (i) => save(list.filter((_, j) => j !== i));
+  const first = (i) => { const l = [...list]; const [x] = l.splice(i, 1); save([x, ...l]); toast('Cette clé sera utilisée en premier'); };
   const hide = (v) => v.slice(0, 6) + '…' + v.slice(-4);
   return (
     <View>
-      <Label>Clés de secours {list.length ? `(${list.length})` : ''}</Label>
-      <Txt muted style={{ fontSize: 12, marginBottom: 6 }}>Quand une clé atteint sa limite gratuite (ou ne marche plus), l'appli passe toute seule à la suivante.</Txt>
-      {list.map((v, i) => (
-        <View key={v} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderColor: C.line }}>
-          <Text style={{ color: C.ink, flex: 1, fontWeight: '700' }}>🔑 Clé {i + 2} · {hide(v)}</Text>
-          <Pressable hitSlop={10} onPress={() => ask('Retirer cette clé ?', hide(v), [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => del(i) }])}><Text style={{ color: C.muted, fontSize: 16 }}>✕</Text></Pressable>
-        </View>
-      ))}
-      <Input value={k} onChangeText={setK} autoCapitalize="none" autoCorrect={false} placeholder="Coller une autre clé AIza…" onSubmitEditing={add} />
-      <Btn small kind="sec" label="＋ Ajouter cette clé" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={!k.trim()} onPress={add} />
+      <Label>Mes clés IA {list.length ? `(${list.length})` : ''}</Label>
+      {list.length > 1 && <Txt muted style={{ fontSize: 12, marginBottom: 6 }}>La 1re est utilisée d'abord. Si elle atteint sa limite, n'a plus de crédit ou ne marche plus, l'appli passe toute seule à la suivante.</Txt>}
+      {!list.length && <Txt muted style={{ fontSize: 12, marginBottom: 6 }}>Aucune clé pour l'instant : ajoute-en une ci-dessous.</Txt>}
+      {list.map((x, i) => {
+        const pr = providerOf(x);
+        return (
+          <View key={x.key} style={{ paddingVertical: 8, borderTopWidth: 1, borderColor: C.line }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={{ fontSize: 18 }}>{pr.icon}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: C.ink, fontWeight: '700' }} numberOfLines={1}>{i + 1}. {pr.name}</Text>
+                <Text style={{ color: C.muted, fontSize: 12 }} numberOfLines={1}>{hide(x.key)} · {x.model || pr.model}</Text>
+              </View>
+              {i > 0 && <Pressable hitSlop={8} onPress={() => first(i)}><Text style={{ color: C.pri, fontSize: 12, fontWeight: '700' }}>⬆️ 1re</Text></Pressable>}
+              <Pressable hitSlop={8} onPress={() => { setEdit(edit === i ? -1 : i); setEditModel(x.model || pr.model); }}><Text style={{ fontSize: 15 }}>⚙️</Text></Pressable>
+              <Pressable hitSlop={10} onPress={() => ask('Retirer cette clé ?', `${pr.name} · ${hide(x.key)}`, [{ text: 'Annuler', style: 'cancel' }, { text: 'Retirer', style: 'destructive', onPress: () => del(i) }])}><Text style={{ color: C.muted, fontSize: 16 }}>✕</Text></Pressable>
+            </View>
+            {edit === i && <View style={{ marginTop: 6 }}>
+              <Txt muted style={{ fontSize: 12 }}>Modèle (change-le seulement si l'IA dit « modèle introuvable »)</Txt>
+              <Row style={{ flexWrap: 'nowrap' }}>
+                <Input style={{ flex: 1, minWidth: 0 }} value={editModel} onChangeText={setEditModel} autoCapitalize="none" autoCorrect={false} />
+                <Btn small label="OK" onPress={() => { const l = [...list]; l[i] = { ...x, model: editModel.trim() === pr.model ? '' : editModel.trim() }; save(l); setEdit(-1); toast('Modèle enregistré ✅'); }} />
+              </Row>
+            </View>}
+          </View>
+        );
+      })}
+
+      <Label>Ajouter une clé</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {Object.entries(PROVIDERS).map(([id, x]) => (
+          <Pressable key={id} onPress={() => setP(id)} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1.5, borderColor: p === id ? C.pri : C.line, backgroundColor: p === id ? C.priSoft : 'transparent' }}>
+            <Text style={{ color: C.ink, fontWeight: p === id ? '800' : '600', fontSize: 13 }}>{x.icon} {x.name.split(' (')[0]}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Txt muted style={{ fontSize: 12, marginTop: 6 }}>{prov.free ? '🆓 Gratuite (avec une limite par jour).' : '💳 Payante : chaque génération est facturée sur ton compte (quelques centimes). Il faut ajouter du crédit sur le site.'}</Txt>
+      <Btn kind="sec" small label={`Obtenir une clé (${prov.url.split('/')[2]})`} style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => Linking.openURL(prov.url)} />
+      <Row style={{ flexWrap: 'nowrap', marginTop: 8 }}>
+        <Input style={{ flex: 1, minWidth: 0 }} value={k} onChangeText={setK} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder={`Coller la clé ${prov.hint}`} onSubmitEditing={add} />
+        <Btn small kind="ghost" label={show ? '🙈' : '👁️'} onPress={() => setShow(!show)} />
+      </Row>
+      <Input style={{ marginTop: 6 }} value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} placeholder={`Modèle (par défaut : ${prov.model})`} />
+      <Btn small label="＋ Ajouter cette clé" style={{ marginTop: 8, alignSelf: 'flex-start' }} disabled={!k.trim()} onPress={add} />
     </View>
   );
 }

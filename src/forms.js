@@ -119,7 +119,7 @@ export function ChapitreForm({ mid }) {
       commit(); setModal(null); reschedule(S); go({ name: 'ch', id, tab: 'cours' });
       return;
     }
-    if (!S.settings.apiKey) return setErr("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.");
+    if (!S.settings.apiKey) return setErr("Ajoute d'abord une clé IA dans ⚙️ Réglages.");
     // le chapitre est créé tout de suite ; l'IA le remplit en arrière-plan
     const id = uid();
     S.chs[id] = { id, matiereId: mat, titre: titre.trim(), ds: dsIso || '', dsTime: tIso || '', pack: normPack({}), srs: {}, auto: {}, skip: {}, consigne: consigne.trim(), created: Date.now() };
@@ -159,7 +159,7 @@ export function AddNotesForm({ id }) {
   const [err, setErr] = useState('');
   const add = async () => {
     if (!uris.length && !txt.trim()) return setErr('Ajoute au moins une photo ou du texte.');
-    if (!S.settings.apiKey) return setErr("Ajoute d'abord ta clé Gemini dans ⚙️ Réglages.");
+    if (!S.settings.apiKey) return setErr("Ajoute d'abord une clé IA dans ⚙️ Réglages.");
     setModal(null);
     toast("⏳ Ajout de tes notes en arrière-plan. Je te préviens quand c'est fini !");
     askPermission().catch(() => {});
@@ -201,7 +201,7 @@ export function ChSettings({ id }) {
   };
   const clean = async () => {
     if (!consigne.trim()) return setErr("Écris d'abord ce que le prof a dit de ne pas apprendre.");
-    if (!S.settings.apiKey) return setErr('Ajoute ta clé Gemini dans ⚙️ Réglages.');
+    if (!S.settings.apiKey) return setErr('Ajoute une clé IA dans ⚙️ Réglages.');
     ch.consigne = consigne.trim();
     try {
       const r = await runAI('Tri de tes fiches', () => gemini({ apiKey: S.settings.apiKey, model: S.settings.model, prompt: promptSkip(ch) }));
